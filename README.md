@@ -1,75 +1,27 @@
-# React + TypeScript + Vite
+# Vehkix
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vehicle register built with React, Vite, and Supabase. Public and personal vehicles load only from Supabase; connection or schema problems are shown in the interface, with no local data fallback.
 
-Currently, two official plugins are available:
+## Supabase setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Run [`supabase/setup.sql`](supabase/setup.sql) only to reset and reseed the public vehicle table. It drops and recreates `public.vehicles`.
+2. Run or re-run [`supabase/user-accounts.sql`](supabase/user-accounts.sql) to add unique usernames, Auth signup handling, the private `user_vehicles` table, and the private `user-vehicle-images` Storage bucket with per-user policies.
+3. Supabase Auth enforces unique email addresses; the profiles index makes usernames unique regardless of case. Public vehicle rows are readable by everyone, while personal rows are private to their owner.
+4. Copy `.env.example` to `.env` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the project URL and publishable/anon key. Never expose a `service_role` key in browser code or GitHub Pages settings.
 
-## React Compiler
+## GitHub Pages
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The workflow in `.github/workflows/deploy.yml` deploys the `main` branch to `https://fayisdotdev.github.io/vehkix/`.
 
-## Expanding the ESLint configuration
+1. In the repository's **Settings > Secrets and variables > Actions**, add the `VITE_SUPABASE_URL` repository variable and `VITE_SUPABASE_ANON_KEY` repository secret.
+2. In **Settings > Pages**, choose **GitHub Actions** as the build and deployment source.
+3. Push to `main` or manually run **Deploy to GitHub Pages** in the Actions tab.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Local development
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
+Build and lint with `npm run build` and `npm run lint`.
