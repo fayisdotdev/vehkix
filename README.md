@@ -11,11 +11,11 @@ Vehkix manages each signed-in user's private vehicle collection with React, Vite
 
 ## GitHub Pages
 
-The workflow in `.github/workflows/deploy.yml` deploys the `main` branch to `https://fayisdotdev.github.io/vehkix/`.
+The built site is published from the `gh-pages` branch at `https://fayisdotdev.github.io/vehkix/`. GitHub Actions is not used.
 
-1. In the repository's **Settings > Secrets and variables > Actions**, add the `VITE_SUPABASE_URL` repository variable and `VITE_SUPABASE_ANON_KEY` repository secret.
-2. In **Settings > Pages**, choose **GitHub Actions** as the build and deployment source.
-3. Push to `main` or manually run **Deploy to GitHub Pages** in the Actions tab.
+1. In the repository's **Settings > Pages**, set **Source** to **Deploy from a branch**, choose `gh-pages`, and choose `/(root)`.
+2. Commit and push source changes to `main`, then run `npm run deploy`. It builds `docs/` and publishes it to `gh-pages`; the first run creates that branch.
+3. Keep `.env` local and ignored. The Supabase URL and anon/publishable key are embedded in the built browser app, so only use the anon key protected by row-level security. Never use a `service_role` key.
 
 ## Local development
 
