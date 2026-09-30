@@ -1,26 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
-
-export interface VehicleDraft {
-  vehicle_number: string
-  name: string
-  model: string
-  company: string
-  year: string
-  taken_date: string
-  last_service_date: string
-  last_service_km: string
-  next_service_date: string
-  next_service_km: string
-  last_pucc_date: string
-  next_pucc_date: string
-  insurance_taken_date: string
-  insurance_next_renewal_date: string
-}
-
-export interface ExistingVehicleImage {
-  path: string
-  url?: string
-}
+import type { ExistingVehicleImage, VehicleDraft } from '../types/vehicle'
+import '../styles/forms.css'
+import './VehicleForm.css'
 
 interface VehicleFormProps {
   initialDraft?: VehicleDraft

@@ -1,17 +1,9 @@
 import { useState, type FormEvent } from 'react'
+import type { AuthFeedback, AuthMode, AuthValues } from '../types/auth'
+import '../styles/forms.css'
+import './AuthPanel.css'
 
-export type AuthMode = 'sign-in' | 'sign-up'
-
-export interface AuthValues {
-  username: string
-  email: string
-  password: string
-}
-
-export interface AuthFeedback {
-  kind: 'error' | 'success'
-  message: string
-}
+export type { AuthFeedback, AuthMode, AuthValues } from '../types/auth'
 
 interface AuthPanelProps {
   onSubmit: (mode: AuthMode, values: AuthValues) => Promise<AuthFeedback>

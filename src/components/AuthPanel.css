@@ -1,0 +1,60 @@
+.auth-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 56px;
+  padding: 30px 0 36px;
+  border-block: 1px solid var(--line);
+}
+
+.auth-intro h2 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 23px;
+}
+
+.auth-intro > p:last-child {
+  max-width: 340px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auth-form-area {
+  min-width: 0;
+}
+
+.mode-switch {
+  display: flex;
+  width: fit-content;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+}
+
+.mode-switch button {
+  min-width: 82px;
+  padding: 8px 12px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.mode-switch button[aria-pressed='true'] {
+  color: var(--white);
+  background: var(--green);
+}
+
+.stacked-form {
+  display: grid;
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .auth-panel {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
