@@ -17,8 +17,15 @@ export interface VehicleDraft {
   insurance_next_renewal_date: string
 }
 
+export interface ExistingVehicleImage {
+  path: string
+  url?: string
+}
+
 interface VehicleFormProps {
-  onSave: (draft: VehicleDraft, images: File[]) => Promise<string | null>
+  initialDraft?: VehicleDraft
+  existingImages?: ExistingVehicleImage[]
+  onSave: (draft: VehicleDraft, images: File[], retainedImagePaths: string[]) => Promise<string | null>
   onCancel: () => void
 }
 
@@ -39,10 +46,11 @@ const emptyDraft: VehicleDraft = {
   insurance_next_renewal_date: '',
 }
 
-function VehicleForm({ onSave, onCancel }: VehicleFormProps) {
+function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: VehicleFormProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const [draft, setDraft] = useState<VehicleDraft>(emptyDraft)
+  const [draft, setDraft] = useState<VehicleDraft>(() => initialDraft ?? emptyDraft)
   const [images, setImages] = useState<File[]>([])
+  const [retainedImages, setRetainedImages] = useState<ExistingVehicleImage[]>(existingImages)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,7 +71,7 @@ function VehicleForm({ onSave, onCancel }: VehicleFormProps) {
     setSaving(true)
     setError(null)
     try {
-      const message = await onSave(draft, images)
+      const message = await onSave(draft, images, retainedImages.map((image) => image.path))
       if (message) setError(message)
     } catch {
       setError('Could not connect to the vehicle service. Try again.')
@@ -122,8 +130,8 @@ function VehicleForm({ onSave, onCancel }: VehicleFormProps) {
     <form className="vehicle-form" onSubmit={handleSubmit}>
       <div className="form-heading">
         <div>
-          <p className="eyebrow">PRIVATE GARAGE</p>
-          <h2 id="vehicle-form-title">Add a vehicle</h2>
+          <p className="eyebrow">PRIVATE COLLECTION</p>
+          <h2 id="vehicle-form-title">{initialDraft ? 'Edit vehicle' : 'Add a vehicle'}</h2>
         </div>
         <button className="text-action" type="button" onClick={onCancel} disabled={saving}>
           Cancel
@@ -176,6 +184,24 @@ function VehicleForm({ onSave, onCancel }: VehicleFormProps) {
           />
           <span>JPG, PNG, WebP or GIF · 10 MB max each</span>
         </div>
+        {retainedImages.length > 0 && (
+          <ul className="selected-files existing-files" aria-label="Uploaded images">
+            {retainedImages.map((image, index) => (
+              <li key={image.path}>
+                {image.url && <img src={image.url} alt="" />}
+                <span>Uploaded image {index + 1}</span>
+                <button
+                  type="button"
+                  className="remove-file"
+                  aria-label={`Remove uploaded image ${index + 1}`}
+                  onClick={() => setRetainedImages((current) => current.filter((item) => item.path !== image.path))}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {images.length > 0 && (
           <ul className="selected-files" aria-live="polite">
             {images.map((image, index) => (
@@ -201,7 +227,7 @@ function VehicleForm({ onSave, onCancel }: VehicleFormProps) {
           Cancel
         </button>
         <button className="primary-action" type="submit" disabled={saving}>
-          {saving ? 'Saving…' : 'Save vehicle'}
+          {saving ? 'Saving…' : initialDraft ? 'Save changes' : 'Save vehicle'}
         </button>
       </div>
     </form>

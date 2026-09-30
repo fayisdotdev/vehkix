@@ -24,7 +24,6 @@
   color: var(--lime);
 }
 
-.topbar-label,
 .data-status,
 .eyebrow,
 .detail-label {
@@ -147,41 +146,6 @@ h1 {
   width: 1px;
   height: 24px;
   background: var(--line);
-}
-
-.collection-tabs {
-  display: flex;
-  gap: 24px;
-  margin: 0 0 20px;
-  border-bottom: 1px solid var(--line);
-}
-
-.collection-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: -1px;
-  padding: 11px 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-}
-
-.collection-tabs button[aria-selected='true'] {
-  border-bottom-color: var(--green);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.collection-tabs button span {
-  min-width: 18px;
-  color: var(--muted);
-  font-size: 11px;
-  text-align: center;
 }
 
 .private-toolbar {
@@ -627,6 +591,29 @@ h1 {
   white-space: nowrap;
 }
 
+.status-cell {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  text-align: right;
+}
+
+.due-countdown {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.due-countdown.due-soon {
+  color: #a36512;
+  font-weight: 600;
+}
+
+.due-countdown.overdue {
+  color: #b33a32;
+  font-weight: 600;
+}
+
 .status-dot {
   width: 7px;
   height: 7px;
@@ -647,7 +634,15 @@ h1 {
 }
 
 .row-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   justify-self: end;
+  white-space: nowrap;
+}
+
+.row-actions .delete-action {
+  color: #a3342e;
 }
 
 .details-toggle {
@@ -842,10 +837,11 @@ h1 {
     padding-right: 92px;
   }
 
-  .status {
+  .status-cell {
     position: absolute;
     top: 23px;
     right: 0;
+    max-width: 130px;
   }
 
   .row-actions {
@@ -856,6 +852,11 @@ h1 {
 
   .details-toggle {
     padding-right: 0;
+  }
+
+  .row-actions {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .expanded-details {

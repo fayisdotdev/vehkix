@@ -39,6 +39,8 @@ interface Vehicle {
   uploaded_by?: string | null
   uploaded_date?: string | null
   images?: string[] | null
+  image_paths?: string[]
+  signed_images?: { path: string; url?: string }[]
 }
 
 function normalizeVehicle(vehicle: Vehicle): Vehicle {
@@ -87,38 +89,68 @@ function daysUntil(value?: string | null) {
   return Math.ceil((date.getTime() - today.getTime()) / 86400000)
 }
 
-function getVehicleStatus(vehicle: Vehicle) {
-  const nearestDue = Math.min(
-    daysUntil(vehicle.service?.next_service_date),
-    daysUntil(vehicle.pucc?.next_pucc_date),
-    daysUntil(vehicle.insurance?.next_renewal_date),
-  )
+function getNextDue(vehicle: Vehicle) {
+  return [
+    { label: 'Service', date: vehicle.service?.next_service_date },
+    { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
+    { label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
+  ]
+    .filter((item): item is { label: string; date: string } => Boolean(item.date))
+    .map((item) => ({ ...item, days: daysUntil(item.date) }))
+    .sort((first, second) => first.days - second.days)[0] ?? null
+}
 
-  if (!Number.isFinite(nearestDue)) return { label: 'No due date', className: 'no-date' }
-  if (nearestDue < 0) return { label: 'Overdue', className: 'overdue' }
-  if (nearestDue <= 30) return { label: 'Due soon', className: 'due-soon' }
+function getVehicleStatus(vehicle: Vehicle) {
+  const nearestDue = getNextDue(vehicle)
+
+  if (!nearestDue) return { label: 'No due date', className: 'no-date' }
+  if (nearestDue.days < 0) return { label: 'Overdue', className: 'overdue' }
+  if (nearestDue.days <= 10) return { label: 'Due soon', className: 'due-soon' }
   return { label: 'On track', className: 'on-track' }
+}
+
+function getDueMessage(vehicle: Vehicle) {
+  const nextDue = getNextDue(vehicle)
+  if (!nextDue || nextDue.days > 10) return null
+  if (nextDue.days < 0) return `${nextDue.label} overdue by ${Math.abs(nextDue.days)} days`
+  if (nextDue.days === 0) return `${nextDue.label} due today`
+  return `${nextDue.label} due in ${nextDue.days} days`
 }
 
 function displayValue(value?: string | number | null) {
   return value === undefined || value === null || value === '' ? 'Not set' : value
 }
 
+function toVehicleDraft(vehicle: Vehicle): VehicleDraft {
+  return {
+    vehicle_number: vehicle.vehicle_number ?? '',
+    name: vehicle.name ?? '',
+    model: vehicle.model ?? '',
+    company: vehicle.company ?? '',
+    year: vehicle.year == null ? '' : String(vehicle.year),
+    taken_date: vehicle.taken_date ?? '',
+    last_service_date: vehicle.service?.last_service_date ?? '',
+    last_service_km: vehicle.service?.last_service_km == null ? '' : String(vehicle.service.last_service_km),
+    next_service_date: vehicle.service?.next_service_date ?? '',
+    next_service_km: vehicle.service?.next_service_km == null ? '' : String(vehicle.service.next_service_km),
+    last_pucc_date: vehicle.pucc?.last_pucc_date ?? '',
+    next_pucc_date: vehicle.pucc?.next_pucc_date ?? '',
+    insurance_taken_date: vehicle.insurance?.taken_date ?? '',
+    insurance_next_renewal_date: vehicle.insurance?.next_renewal_date ?? '',
+  }
+}
+
 function App() {
   const [query, setQuery] = useState('')
   const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null)
-  const [activeCollection, setActiveCollection] = useState<'public' | 'mine'>('public')
-  const [publicVehicles, setPublicVehicles] = useState<Vehicle[]>([])
   const [myVehicles, setMyVehicles] = useState<Vehicle[]>([])
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabaseClient)
-  const [publicLoading, setPublicLoading] = useState(Boolean(supabaseClient))
   const [myVehiclesLoadedFor, setMyVehiclesLoadedFor] = useState<string | null>(null)
-  const [publicError, setPublicError] = useState<string | null>(
-    supabaseClient ? null : 'Supabase is not configured. Add the public project URL and anon key to the app environment.',
-  )
   const [myVehiclesError, setMyVehiclesError] = useState<string | null>(null)
   const [showVehicleForm, setShowVehicleForm] = useState(false)
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   useEffect(() => {
     if (!supabaseClient) return
@@ -134,6 +166,7 @@ function App() {
           setMyVehiclesError(null)
           setMyVehiclesLoadedFor(null)
           setShowVehicleForm(false)
+          setEditingVehicle(null)
         }
       }
     })
@@ -143,33 +176,16 @@ function App() {
       if (error) setMyVehiclesError(error.message)
       setSession(data.session)
       setAuthReady(true)
-      if (!data.session) setMyVehicles([])
+      if (!data.session) {
+        setMyVehicles([])
+        setMyVehiclesError(null)
+        setMyVehiclesLoadedFor(null)
+        setShowVehicleForm(false)
+        setEditingVehicle(null)
+      }
     }).catch(() => {
       if (isCurrent) setAuthReady(true)
     })
-
-    async function loadPublicVehicles() {
-      try {
-        const { data, error } = await client
-          .from('vehicles')
-          .select('*')
-          .order('id', { ascending: true })
-
-        if (!isCurrent) return
-        if (error) {
-          setPublicError('Could not load the public vehicle register. Check the Supabase table and access policy.')
-          return
-        }
-
-        setPublicVehicles((data ?? []).map((row) => normalizeVehicle(row as unknown as Vehicle)))
-      } catch {
-        if (isCurrent) setPublicError('Could not connect to the public vehicle register.')
-      } finally {
-        if (isCurrent) setPublicLoading(false)
-      }
-    }
-
-    void loadPublicVehicles()
 
     return () => {
       isCurrent = false
@@ -202,12 +218,19 @@ function App() {
 
         const vehiclesWithImages = await Promise.all((data ?? []).map(async (row) => {
           const vehicle = normalizeVehicle(row as unknown as Vehicle)
-          const imageResults = await Promise.all((vehicle.images ?? []).map((path) =>
+          const imagePaths = vehicle.images ?? []
+          const imageResults = await Promise.all(imagePaths.map((path) =>
             client.storage.from('user-vehicle-images').createSignedUrl(path, 60 * 60),
           ))
+          const signedImages = imagePaths.map((path, index) => ({
+            path,
+            url: imageResults[index].data?.signedUrl,
+          }))
           return {
             ...vehicle,
-            images: imageResults.flatMap((result) => result.data?.signedUrl ?? []),
+            image_paths: imagePaths,
+            signed_images: signedImages,
+            images: signedImages.flatMap((image) => image.url ?? []),
           }
         }))
         setMyVehicles(vehiclesWithImages)
@@ -265,14 +288,22 @@ function App() {
       : { kind: 'success', message: 'Account created. Check your email to confirm your address.' }
   }
 
-  async function handleVehicleSave(draft: VehicleDraft, images: File[]) {
+  async function handleVehicleSave(
+    draft: VehicleDraft,
+    images: File[],
+    retainedImagePaths: string[],
+  ) {
     if (!supabaseClient || !session) return 'Sign in before adding a vehicle.'
     const client = supabaseClient
 
     const nullableText = (value: string) => value.trim() || null
     const nullableNumber = (value: string) => value.trim() ? Number(value) : null
     const username = session.user.user_metadata.username || session.user.email || null
-    const vehicleId = crypto.randomUUID()
+    const currentImagePaths = editingVehicle?.image_paths ?? []
+    const keptImagePaths = editingVehicle
+      ? retainedImagePaths.filter((path) => currentImagePaths.includes(path))
+      : []
+    const vehicleId = editingVehicle?.id ?? crypto.randomUUID()
     const uploadedPaths: string[] = []
 
     for (const image of images) {
@@ -311,14 +342,23 @@ function App() {
       insurance_taken_date: nullableText(draft.insurance_taken_date),
       insurance_next_renewal_date: nullableText(draft.insurance_next_renewal_date),
       uploaded_by: username,
-      images: uploadedPaths,
+      images: [...keptImagePaths, ...uploadedPaths],
     }
 
-    const { data, error } = await client
-      .from('user_vehicles')
-      .insert(payload)
-      .select('*')
-      .single()
+    const result = editingVehicle
+      ? await client
+        .from('user_vehicles')
+        .update(payload)
+        .eq('id', editingVehicle.id)
+        .eq('user_id', session.user.id)
+        .select('*')
+        .single()
+      : await client
+        .from('user_vehicles')
+        .insert({ ...payload, id: vehicleId, user_id: session.user.id })
+        .select('*')
+        .single()
+    const { data, error } = result
 
     if (error) {
       if (uploadedPaths.length > 0) {
@@ -327,16 +367,63 @@ function App() {
       return 'Could not save this vehicle. Check your connection and try again.'
     }
 
-    const imageResults = await Promise.all(uploadedPaths.map((path) =>
+    const imagePaths = [...keptImagePaths, ...uploadedPaths]
+    const imageResults = await Promise.all(imagePaths.map((path) =>
       client.storage.from('user-vehicle-images').createSignedUrl(path, 60 * 60),
     ))
+    const signedImages = imagePaths.map((path, index) => ({
+      path,
+      url: imageResults[index].data?.signedUrl,
+    }))
     const savedVehicle = normalizeVehicle({
       ...data,
-      images: imageResults.flatMap((result) => result.data?.signedUrl ?? []),
+      image_paths: imagePaths,
+      signed_images: signedImages,
+      images: signedImages.flatMap((image) => image.url ?? []),
     } as unknown as Vehicle)
-    setMyVehicles((current) => [savedVehicle, ...current])
+    if (editingVehicle) {
+      const removedPaths = currentImagePaths.filter((path) => !keptImagePaths.includes(path))
+      setMyVehicles((current) => current.map((vehicle) =>
+        vehicle.id === editingVehicle.id ? savedVehicle : vehicle,
+      ))
+      if (removedPaths.length > 0) {
+        await client.storage.from('user-vehicle-images').remove(removedPaths)
+      }
+    } else {
+      setMyVehicles((current) => [savedVehicle, ...current])
+    }
     setShowVehicleForm(false)
+    setEditingVehicle(null)
     return null
+  }
+
+  async function handleDeleteVehicle(vehicle: Vehicle) {
+    if (!supabaseClient || !session) return
+    setDeleteBusy(true)
+    setMyVehiclesError(null)
+    const client = supabaseClient
+    try {
+      const { error } = await client
+        .from('user_vehicles')
+        .delete()
+        .eq('id', vehicle.id)
+        .eq('user_id', session.user.id)
+
+      if (error) {
+        setMyVehiclesError('Could not delete this vehicle. Please try again.')
+        return
+      }
+
+      setMyVehicles((current) => current.filter((item) => item.id !== vehicle.id))
+      const imagePaths = vehicle.image_paths ?? []
+      if (imagePaths.length > 0) {
+        await client.storage.from('user-vehicle-images').remove(imagePaths)
+      }
+    } catch {
+      setMyVehiclesError('Could not delete this vehicle. Please try again.')
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   async function handleSignOut() {
@@ -346,7 +433,7 @@ function App() {
     else setShowVehicleForm(false)
   }
 
-  const vehicleRecords = activeCollection === 'public' ? publicVehicles : myVehicles
+  const vehicleRecords = myVehicles
   const filteredVehicles = vehicleRecords.filter((vehicle) =>
     [vehicle.id, vehicle.vehicle_number, vehicle.name, vehicle.model, vehicle.company]
       .filter(Boolean)
@@ -355,12 +442,8 @@ function App() {
       .includes(query.trim().toLowerCase()),
   )
   const attentionCount = vehicleRecords.filter((vehicle) => {
-    const nextDue = Math.min(
-      daysUntil(vehicle.service?.next_service_date),
-      daysUntil(vehicle.pucc?.next_pucc_date),
-      daysUntil(vehicle.insurance?.next_renewal_date),
-    )
-    return nextDue <= 30
+    const nextDue = getNextDue(vehicle)
+    return nextDue !== null && nextDue.days <= 10
   }).length
   const mostRecentUpload = vehicleRecords
     .map((vehicle) => vehicle.uploaded_date)
@@ -370,9 +453,8 @@ function App() {
   const myVehiclesLoading = Boolean(
     session?.user.id && myVehiclesLoadedFor !== session.user.id,
   )
-  const collectionLoading = activeCollection === 'public' ? publicLoading : myVehiclesLoading
-  const collectionError = activeCollection === 'public' ? publicError : myVehiclesError
   const username = session?.user.user_metadata.username || session?.user.email || ''
+  const connectionState = !supabaseClient ? 'error' : !authReady ? 'connecting' : 'live'
 
   return (
     <main className="page-shell">
@@ -381,19 +463,15 @@ function App() {
           vehkix<span>.</span>
         </a>
         <div className="topbar-actions">
-          <span className="data-status" data-state={publicLoading ? 'connecting' : publicError ? 'error' : 'live'}>
-          <span aria-hidden="true" />
-            {publicLoading ? 'CONNECTING' : publicError ? 'DATA ERROR' : 'LIVE DATA'}
+          <span className="data-status" data-state={connectionState}>
+            <span aria-hidden="true" />
+            {!supabaseClient ? 'SETUP REQUIRED' : !authReady ? 'CONNECTING' : 'PRIVATE COLLECTION'}
           </span>
-          {session ? (
+          {session && (
             <>
               <span className="account-name">{username}</span>
               <button className="text-action" type="button" onClick={handleSignOut}>Log out</button>
             </>
-          ) : (
-            <button className="text-action" type="button" onClick={() => setActiveCollection('mine')}>
-              Log in / Sign up
-            </button>
           )}
         </div>
       </header>
@@ -401,69 +479,62 @@ function App() {
       <section className="fleet" id="top" aria-labelledby="page-title">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">{activeCollection === 'public' ? 'PUBLIC REGISTER' : 'YOUR GARAGE'}</p>
-            <h1 id="page-title">{activeCollection === 'public' ? 'Vehicles' : 'My vehicles'}</h1>
+            <p className="eyebrow">PRIVATE COLLECTION</p>
+            <h1 id="page-title">My vehicles</h1>
           </div>
-          <div className="summary" aria-label="Fleet summary">
-            <div className="summary-item">
-              <strong>{String(vehicleRecords.length).padStart(2, '0')}</strong>
-              <span>vehicles</span>
+          {session && (
+            <div className="summary" aria-label="Collection summary">
+              <div className="summary-item">
+                <strong>{String(vehicleRecords.length).padStart(2, '0')}</strong>
+                <span>vehicles</span>
+              </div>
+              <div className="summary-divider" />
+              <div className="summary-item">
+                <strong>{String(attentionCount).padStart(2, '0')}</strong>
+                <span>due within 10 days</span>
+              </div>
             </div>
-            <div className="summary-divider" />
-            <div className="summary-item">
-              <strong>{String(attentionCount).padStart(2, '0')}</strong>
-              <span>need attention</span>
-            </div>
-          </div>
+          )}
         </div>
 
-        <div className="collection-tabs" role="tablist" aria-label="Vehicle collections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeCollection === 'public'}
-            onClick={() => { setActiveCollection('public'); setQuery('') }}
-          >
-            Public fleet <span>{publicVehicles.length}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeCollection === 'mine'}
-            onClick={() => { setActiveCollection('mine'); setQuery('') }}
-          >
-            My vehicles <span>{myVehicles.length}</span>
-          </button>
-        </div>
-
-        {activeCollection === 'mine' && !session && authReady && supabaseClient && (
+        {!session && authReady && supabaseClient && (
           <AuthPanel onSubmit={handleAuth} />
         )}
 
-        {activeCollection === 'mine' && !authReady && (
+        {!authReady && (
           <p className="empty-state" role="status">Checking your session…</p>
         )}
 
-        {activeCollection === 'mine' && authReady && !supabaseClient && (
-          <p className="empty-state error-state" role="alert">Supabase is not configured, so accounts and private vehicles are unavailable.</p>
+        {authReady && !supabaseClient && (
+          <p className="empty-state error-state" role="alert">Supabase is not configured, so your private collection is unavailable.</p>
         )}
 
-        {activeCollection === 'mine' && session && (
+        {session && (
           <div className="private-toolbar">
-            <p>Only you can see the vehicles in this garage.</p>
+            <p>Only you can see the vehicles in this collection.</p>
             {!showVehicleForm && (
-              <button className="primary-action" type="button" onClick={() => setShowVehicleForm(true)}>
+              <button
+                className="primary-action"
+                type="button"
+                onClick={() => { setEditingVehicle(null); setShowVehicleForm(true) }}
+              >
                 Add vehicle
               </button>
             )}
           </div>
         )}
 
-        {activeCollection === 'mine' && session && showVehicleForm && (
-          <VehicleForm onSave={handleVehicleSave} onCancel={() => setShowVehicleForm(false)} />
+        {session && showVehicleForm && (
+          <VehicleForm
+            key={editingVehicle?.id ?? 'new-vehicle'}
+            initialDraft={editingVehicle ? toVehicleDraft(editingVehicle) : undefined}
+            existingImages={editingVehicle?.signed_images ?? []}
+            onSave={handleVehicleSave}
+            onCancel={() => { setShowVehicleForm(false); setEditingVehicle(null) }}
+          />
         )}
 
-        {(activeCollection === 'public' || session) && (
+        {session && (
           <label className="search-box">
             <span className="search-icon" aria-hidden="true" />
             <input
@@ -477,18 +548,19 @@ function App() {
           </label>
         )}
 
-        {collectionLoading && (activeCollection === 'public' || session) && (
-          <p className="empty-state" role="status">Loading vehicles…</p>
+        {session && myVehiclesLoading && (
+          <p className="empty-state" role="status">Loading your collection…</p>
         )}
-        {collectionError && (activeCollection === 'public' || session) && (
-          <p className="empty-state error-state" role="alert">{collectionError}</p>
+        {session && myVehiclesError && (
+          <p className="empty-state error-state" role="alert">{myVehiclesError}</p>
         )}
 
-        {!collectionLoading && !collectionError && (activeCollection === 'public' || session) && (
-        <div className="vehicle-list" role="list" aria-label={activeCollection === 'public' ? 'Public vehicles' : 'My vehicles'}>
+        {session && !myVehiclesLoading && !myVehiclesError && (
+        <div className="vehicle-list" role="list" aria-label="My vehicles">
           {filteredVehicles.map((vehicle) => {
             const vehicleName = vehicle.name || 'Unnamed vehicle'
             const status = getVehicleStatus(vehicle)
+            const dueMessage = getDueMessage(vehicle)
             const documents = [
               { label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
               { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
@@ -524,10 +596,32 @@ function App() {
                   <strong>{formatDate(nextDocument?.date)}</strong>
                   <span>{nextDocument ? `${nextDocument.label} renewal` : 'No renewal date'}</span>
                 </div>
-                <span className={`status ${status.className}`}>
-                  <span className="status-dot" />{status.label}
-                </span>
+                <div className="status-cell">
+                  <span className={`status ${status.className}`}>
+                    <span className="status-dot" />{status.label}
+                  </span>
+                  {dueMessage && <span className={`due-countdown ${status.className}`}>{dueMessage}</span>}
+                </div>
                 <div className="row-actions">
+                  <button
+                    className="text-action"
+                    type="button"
+                    onClick={() => { setEditingVehicle(vehicle); setShowVehicleForm(true) }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="text-action delete-action"
+                    type="button"
+                    disabled={deleteBusy}
+                    onClick={() => {
+                      if (window.confirm(`Delete ${vehicleName} and its uploaded images? This cannot be undone.`)) {
+                        void handleDeleteVehicle(vehicle)
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
                   <button
                     className="details-toggle"
                     type="button"
@@ -608,15 +702,13 @@ function App() {
             <p className="empty-state">
               {query.trim()
                 ? <>No vehicles match “{query}”.</>
-                : activeCollection === 'mine'
-                  ? 'Your private garage is empty.'
-                  : 'No public vehicles have been added yet.'}
+                : 'Your private collection is empty.'}
             </p>
           )}
         </div>
         )}
         <footer className="list-footer">
-          <span>{activeCollection === 'public' ? 'Public vehicles' : 'Private vehicles'} · {vehicleRecords.length}</span>
+          <span>Private vehicles · {vehicleRecords.length}</span>
           {mostRecentUpload && <span>Updated {formatDate(mostRecentUpload)}</span>}
         </footer>
       </section>
