@@ -64,10 +64,12 @@ export function useAuthSession() {
         message.includes('profiles_username_unique_ci')
         || message.includes('duplicate key')
         || message.includes('username is already in use')
+        || message.includes('username already taken')
+        || message.includes('database error saving new user')
       ) {
         return {
           kind: 'error',
-          message: 'That username is already in use. Usernames are case-insensitive; try another.',
+          message: 'This username is already taken.',
         }
       }
       if (message.includes('already registered') || message.includes('already exists')) {

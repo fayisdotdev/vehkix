@@ -9,6 +9,11 @@ interface VehicleImage {
   url?: string
 }
 
+interface ProfileSummary {
+  id: string
+  username: string
+}
+
 async function signVehicleImages(paths: string[]): Promise<VehicleImage[]> {
   if (!supabaseClient) return []
   const client = supabaseClient
@@ -49,39 +54,58 @@ function toDatabasePayload(draft: VehicleDraft, username: string | null) {
   }
 }
 
-export function useMyVehicles(session: Session | null) {
+export function useMyVehicles(session: Session | null, adminView = false) {
   const [records, setRecords] = useState<Vehicle[]>([])
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
-  const [errorState, setErrorState] = useState<{ userId: string; message: string } | null>(null)
+  const [errorState, setErrorState] = useState<{ scopeKey: string; message: string } | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [userCount, setUserCount] = useState<number | null>(null)
   const userId = session?.user.id
+  const scopeKey = userId ? `${userId}:${adminView ? 'admin' : 'owner'}` : null
 
   useEffect(() => {
     if (!supabaseClient || !userId) return
 
     const client = supabaseClient
     const activeUserId = userId
+    const activeScopeKey = `${activeUserId}:${adminView ? 'admin' : 'owner'}`
     let isCurrent = true
 
     async function loadVehicles() {
       try {
-        const { data, error } = await client
-          .from('user_vehicles')
-          .select('*')
-          .eq('user_id', activeUserId)
-          .order('created_at', { ascending: false })
+        const vehicleQuery = client.from('user_vehicles').select('*')
+        const vehicleResult = adminView
+          ? await vehicleQuery.order('created_at', { ascending: false })
+          : await vehicleQuery
+            .eq('user_id', activeUserId)
+            .order('created_at', { ascending: false })
 
         if (!isCurrent) return
-        if (error) {
+        if (vehicleResult.error) {
           setErrorState({
-            userId: activeUserId,
+            scopeKey: activeScopeKey,
             message: 'Could not load your collection. Check the user-account setup SQL and RLS policies.',
           })
-          setLoadedFor(activeUserId)
+          setLoadedFor(activeScopeKey)
           return
         }
 
-        const normalized = (data ?? []).map((row) => normalizeVehicle(row as unknown as Vehicle))
+        let profiles: ProfileSummary[] = []
+        if (adminView) {
+          const profileResult = await client.from('profiles').select('id, username')
+          if (!isCurrent) return
+          if (profileResult.error) {
+            setErrorState({ scopeKey: activeScopeKey, message: 'Could not load admin account summaries.' })
+            setLoadedFor(activeScopeKey)
+            return
+          }
+          profiles = profileResult.data ?? []
+        }
+        const usernameById = new Map(profiles.map((profile) => [profile.id, profile.username]))
+        const normalized = (vehicleResult.data ?? []).map((row) => normalizeVehicle({
+          ...(row as unknown as Vehicle),
+          owner_username: usernameById.get(row.user_id) ?? row.user_id,
+        }))
         const withImages = await Promise.all(normalized.map(async (vehicle) => {
           const paths = vehicle.images ?? []
           const signedImages = await signVehicleImages(paths)
@@ -96,11 +120,12 @@ export function useMyVehicles(session: Session | null) {
         if (!isCurrent) return
         setRecords(withImages)
         setErrorState(null)
-        setLoadedFor(activeUserId)
+        setUserCount(adminView ? profiles.length : null)
+        setLoadedFor(activeScopeKey)
       } catch {
         if (!isCurrent) return
-        setErrorState({ userId: activeUserId, message: 'Could not connect to your private collection.' })
-        setLoadedFor(activeUserId)
+        setErrorState({ scopeKey: activeScopeKey, message: 'Could not connect to your private collection.' })
+        setLoadedFor(activeScopeKey)
       }
     }
 
@@ -109,7 +134,7 @@ export function useMyVehicles(session: Session | null) {
     return () => {
       isCurrent = false
     }
-  }, [userId])
+  }, [userId, adminView])
 
   async function saveVehicle(
     draft: VehicleDraft,
@@ -123,11 +148,13 @@ export function useMyVehicles(session: Session | null) {
     const editingVehicle = editingVehicleId
       ? records.find((vehicle) => vehicle.id === editingVehicleId)
       : undefined
+    if (adminView && !editingVehicle) return 'Select an existing vehicle to manage from the admin panel.'
     const existingPaths = editingVehicle?.image_paths ?? []
     const keptImagePaths = editingVehicle
       ? retainedImagePaths.filter((path) => existingPaths.includes(path))
       : []
     const vehicleId = editingVehicle?.id ?? crypto.randomUUID()
+    const targetUserId = editingVehicle?.user_id ?? session.user.id
     const uploadedPaths: string[] = []
 
     try {
@@ -135,7 +162,7 @@ export function useMyVehicles(session: Session | null) {
         const extension = image.name.includes('.')
           ? image.name.slice(image.name.lastIndexOf('.') + 1).replace(/[^a-zA-Z0-9]/g, '')
           : 'image'
-        const path = `${session.user.id}/${vehicleId}/${crypto.randomUUID()}.${extension}`
+        const path = `${targetUserId}/${vehicleId}/${crypto.randomUUID()}.${extension}`
         const { error } = await client.storage
           .from('user-vehicle-images')
           .upload(path, image, { contentType: image.type, upsert: false })
@@ -154,7 +181,10 @@ export function useMyVehicles(session: Session | null) {
         ? imagePaths[0] ?? null
         : imagePaths[primaryImageIndex] ?? null
       const payload = {
-        ...toDatabasePayload(draft, session.user.user_metadata.username || session.user.email || null),
+        ...toDatabasePayload(
+          draft,
+          editingVehicle?.uploaded_by ?? session.user.user_metadata.username ?? session.user.email ?? null,
+        ),
         images: imagePaths,
         primary_image: primaryImagePath,
       }
@@ -163,12 +193,12 @@ export function useMyVehicles(session: Session | null) {
           .from('user_vehicles')
           .update(payload)
           .eq('id', editingVehicle.id)
-          .eq('user_id', session.user.id)
+          .eq('user_id', targetUserId)
           .select('*')
           .single()
         : await client
           .from('user_vehicles')
-          .insert({ ...payload, id: vehicleId, user_id: session.user.id })
+          .insert({ ...payload, id: vehicleId, user_id: targetUserId })
           .select('*')
           .single()
 
@@ -218,7 +248,7 @@ export function useMyVehicles(session: Session | null) {
         .from('user_vehicles')
         .delete()
         .eq('id', vehicle.id)
-        .eq('user_id', session.user.id)
+        .eq('user_id', vehicle.user_id ?? session.user.id)
 
       if (error) return 'Could not delete this vehicle. Please try again.'
 
@@ -238,9 +268,9 @@ export function useMyVehicles(session: Session | null) {
     }
   }
 
-  const loading = Boolean(userId && loadedFor !== userId)
-  const error = errorState && errorState.userId === userId ? errorState.message : null
-  const vehicles = loadedFor === userId ? records : []
+  const loading = Boolean(scopeKey && loadedFor !== scopeKey)
+  const error = errorState && errorState.scopeKey === scopeKey ? errorState.message : null
+  const vehicles = loadedFor === scopeKey ? records : []
 
-  return { vehicles, loading, error, deleteBusy, saveVehicle, deleteVehicle }
+  return { vehicles, loading, error, deleteBusy, userCount, saveVehicle, deleteVehicle }
 }

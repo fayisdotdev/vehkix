@@ -26,6 +26,7 @@ export interface Vehicle {
     next_renewal_date?: string | null
   }
   user_id?: string
+  owner_username?: string
   last_service_date?: string | null
   last_service_km?: number | null
   next_service_date?: string | null

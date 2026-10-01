@@ -51,6 +51,8 @@ export function getNextDue(vehicle: Vehicle) {
     { label: 'Service', date: vehicle.service?.next_service_date },
     { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
     { label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
+    { label: 'Tax', date: vehicle.tax_valid_upto },
+    { label: 'Registration', date: vehicle.registration_validity },
   ]
     .filter((item): item is { label: string; date: string } => Boolean(item.date))
     .map((item) => ({ ...item, days: daysUntil(item.date) }))

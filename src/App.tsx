@@ -1,8 +1,12 @@
 import { useState } from 'react'
+import brandMark from '../images/logo/vehkix-mark-color.png'
+import brandWordmark from '../images/logo/vehkix-wordmark-color-transparent.png'
 import { supabaseClient } from './lib/supabase'
+import AdminPanel from './components/AdminPanel'
 import AuthPanel from './components/AuthPanel'
 import VehicleForm from './components/VehicleForm'
 import VehicleList from './components/VehicleList'
+import { useAdminAccess } from './hooks/useAdminAccess'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useMyVehicles } from './hooks/useMyVehicles'
 import { getNextDue, toVehicleDraft } from './lib/vehicle'
@@ -10,19 +14,23 @@ import type { Vehicle, VehicleDraft } from './types/vehicle'
 import './styles/page.css'
 
 function App() {
+  const [activeView, setActiveView] = useState<'collection' | 'admin'>('collection')
   const [query, setQuery] = useState('')
   const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null)
   const [showVehicleForm, setShowVehicleForm] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
   const { session, isReady: authReady, error: authError, submitAuth, signOut } = useAuthSession()
+  const { isAdmin, loading: adminAccessLoading, error: adminAccessError } = useAdminAccess(session)
+  const adminView = activeView === 'admin' && isAdmin
   const {
     vehicles: vehicleRecords,
     loading: myVehiclesLoading,
     error: myVehiclesError,
     deleteBusy,
+    userCount,
     saveVehicle,
     deleteVehicle,
-  } = useMyVehicles(session)
+  } = useMyVehicles(session, adminView)
   const [actionError, setActionError] = useState<string | null>(null)
 
   async function handleVehicleSave(
@@ -53,6 +61,7 @@ function App() {
     setActionError(await signOut())
     setShowVehicleForm(false)
     setEditingVehicle(null)
+    setActiveView('collection')
   }
 
   const filteredVehicles = vehicleRecords.filter((vehicle) =>
@@ -74,7 +83,7 @@ function App() {
       <header className="topbar">
         {session && (
           <a className="wordmark" href="#top" aria-label="Vehkix home">
-            vehkix<span>.</span>
+            <img src={brandMark} alt="Vehkix" />
           </a>
         )}
         <div className="topbar-actions">
@@ -85,6 +94,16 @@ function App() {
           {session && (
             <>
               <span className="account-name">{username}</span>
+              {isAdmin && (
+                <button
+                  className="text-action admin-view-toggle"
+                  type="button"
+                  aria-pressed={adminView}
+                  onClick={() => { setActiveView(adminView ? 'collection' : 'admin'); setQuery('') }}
+                >
+                  {adminView ? 'My collection' : 'Admin panel'}
+                </button>
+              )}
               <button className="text-action" type="button" onClick={handleSignOut}>Log out</button>
             </>
           )}
@@ -95,10 +114,12 @@ function App() {
         <div className="page-heading">
           <div>
             <h1 id="page-title">
-              {session ? 'My vehicles' : <>vehkix<span className="brand-mark">.</span></>}
+              {session
+                ? adminView ? 'Admin panel' : 'My vehicles'
+                : <img className="brand-wordmark" src={brandWordmark} alt="Vehkix" />}
             </h1>
           </div>
-          {session && (
+          {session && !adminView && (
             <div className="summary" aria-label="Collection summary">
               <div className="summary-item">
                 <strong>{String(vehicleRecords.length).padStart(2, '0')}</strong>
@@ -125,7 +146,19 @@ function App() {
           <p className="empty-state error-state" role="alert">Supabase is not configured, so your private collection is unavailable.</p>
         )}
 
-        {session && (
+        {session && adminAccessLoading && (
+          <p className="empty-state" role="status">Verifying admin access…</p>
+        )}
+
+        {session && adminView && (
+          <AdminPanel
+            userCount={userCount}
+            vehicleCount={vehicleRecords.length}
+            dueCount={attentionCount}
+          />
+        )}
+
+        {session && !adminView && (
           <div className="private-toolbar">
             <p>Only you can see the vehicles in this collection.</p>
             {!showVehicleForm && (
@@ -140,7 +173,7 @@ function App() {
           </div>
         )}
 
-        {session && showVehicleForm && (
+        {session && showVehicleForm && (!adminView || editingVehicle) && (
           <VehicleForm
             key={editingVehicle?.id ?? 'new-vehicle'}
             initialDraft={editingVehicle ? toVehicleDraft(editingVehicle) : undefined}
@@ -168,9 +201,9 @@ function App() {
         {session && myVehiclesLoading && (
           <p className="empty-state" role="status">Loading your collection…</p>
         )}
-        {(authError || (session && myVehiclesError) || actionError) && (
+        {(authError || (session && myVehiclesError) || (session && adminAccessError) || actionError) && (
           <p className="empty-state error-state" role="alert">
-            {authError || myVehiclesError || actionError}
+            {authError || myVehiclesError || adminAccessError || actionError}
           </p>
         )}
 
@@ -180,6 +213,7 @@ function App() {
             query={query}
             expandedVehicleId={expandedVehicleId}
             deleteBusy={deleteBusy}
+            showOwner={adminView}
             onToggleExpanded={(vehicleId) => setExpandedVehicleId(
               expandedVehicleId === vehicleId ? null : vehicleId,
             )}
@@ -187,7 +221,7 @@ function App() {
             onDelete={(vehicle) => { void handleDeleteVehicle(vehicle) }}
           />
         )}
-        {session && (
+        {session && !adminView && (
           <footer className="list-footer">
             <span>“The road ahead belongs to those who keep moving.”</span>
           </footer>
