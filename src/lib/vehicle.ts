@@ -94,5 +94,10 @@ export function toVehicleDraft(vehicle: Vehicle): VehicleDraft {
     next_pucc_date: vehicle.pucc?.next_pucc_date ?? '',
     insurance_taken_date: vehicle.insurance?.taken_date ?? '',
     insurance_next_renewal_date: vehicle.insurance?.next_renewal_date ?? '',
+    rc_owner_name: vehicle.rc_owner_name ?? '',
+    chassis_no: vehicle.chassis_no ?? '',
+    engine_no: vehicle.engine_no ?? '',
+    tax_valid_upto: vehicle.tax_valid_upto ?? '',
+    registration_validity: vehicle.registration_validity ?? '',
   }
 }

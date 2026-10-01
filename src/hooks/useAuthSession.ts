@@ -60,8 +60,15 @@ export function useAuthSession() {
     })
     if (signUpError) {
       const message = signUpError.message.toLowerCase()
-      if (message.includes('profiles_username_unique_ci') || message.includes('duplicate key')) {
-        return { kind: 'error', message: 'That username is already taken.' }
+      if (
+        message.includes('profiles_username_unique_ci')
+        || message.includes('duplicate key')
+        || message.includes('username is already in use')
+      ) {
+        return {
+          kind: 'error',
+          message: 'That username is already in use. Usernames are case-insensitive; try another.',
+        }
       }
       if (message.includes('already registered') || message.includes('already exists')) {
         return { kind: 'error', message: 'An account may already use that email address.' }

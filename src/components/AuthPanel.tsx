@@ -39,9 +39,8 @@ function AuthPanel({ onSubmit }: AuthPanelProps) {
   return (
     <section className="auth-panel" aria-labelledby="auth-title">
       <div className="auth-intro">
-        <p className="eyebrow">MEMBER ACCESS</p>
         <h2 id="auth-title">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
-        <p>{isSignUp ? 'Keep your vehicles in a private garage.' : 'Sign in to view and manage your vehicles.'}</p>
+        <p>Your own automotive companion.</p>
       </div>
       <div className="auth-form-area">
         <div className="mode-switch" aria-label="Account access mode">

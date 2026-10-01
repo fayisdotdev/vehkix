@@ -5,11 +5,7 @@ import VehicleForm from './components/VehicleForm'
 import VehicleList from './components/VehicleList'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useMyVehicles } from './hooks/useMyVehicles'
-import {
-  formatDate,
-  getNextDue,
-  toVehicleDraft,
-} from './lib/vehicle'
+import { getNextDue, toVehicleDraft } from './lib/vehicle'
 import type { Vehicle, VehicleDraft } from './types/vehicle'
 import './styles/page.css'
 
@@ -29,8 +25,19 @@ function App() {
   } = useMyVehicles(session)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  async function handleVehicleSave(draft: VehicleDraft, images: File[], retainedImagePaths: string[]) {
-    const message = await saveVehicle(draft, images, retainedImagePaths, editingVehicle?.id)
+  async function handleVehicleSave(
+    draft: VehicleDraft,
+    images: File[],
+    retainedImagePaths: string[],
+    primaryImageIndex: number | null,
+  ) {
+    const message = await saveVehicle(
+      draft,
+      images,
+      retainedImagePaths,
+      primaryImageIndex,
+      editingVehicle?.id,
+    )
     if (!message) {
       setShowVehicleForm(false)
       setEditingVehicle(null)
@@ -59,24 +66,21 @@ function App() {
     const nextDue = getNextDue(vehicle)
     return nextDue !== null && nextDue.days <= 10
   }).length
-  const mostRecentUpload = vehicleRecords
-    .map((vehicle) => vehicle.uploaded_date)
-    .filter((date): date is string => Boolean(date))
-    .sort()
-    .at(-1)
   const username = session?.user.user_metadata.username || session?.user.email || ''
   const connectionState = !supabaseClient ? 'error' : !authReady ? 'connecting' : 'live'
 
   return (
     <main className="page-shell">
       <header className="topbar">
-        <a className="wordmark" href="#top" aria-label="Vehkix home">
-          vehkix<span>.</span>
-        </a>
+        {session && (
+          <a className="wordmark" href="#top" aria-label="Vehkix home">
+            vehkix<span>.</span>
+          </a>
+        )}
         <div className="topbar-actions">
           <span className="data-status" data-state={connectionState}>
             <span aria-hidden="true" />
-            {!supabaseClient ? 'SETUP REQUIRED' : !authReady ? 'CONNECTING' : 'PRIVATE COLLECTION'}
+            {!supabaseClient ? 'SETUP REQUIRED' : !authReady ? 'CONNECTING' : 'CONNECTED'}
           </span>
           {session && (
             <>
@@ -90,8 +94,9 @@ function App() {
       <section className="fleet" id="top" aria-labelledby="page-title">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">PRIVATE COLLECTION</p>
-            <h1 id="page-title">My vehicles</h1>
+            <h1 id="page-title">
+              {session ? 'My vehicles' : <>vehkix<span className="brand-mark">.</span></>}
+            </h1>
           </div>
           {session && (
             <div className="summary" aria-label="Collection summary">
@@ -140,6 +145,7 @@ function App() {
             key={editingVehicle?.id ?? 'new-vehicle'}
             initialDraft={editingVehicle ? toVehicleDraft(editingVehicle) : undefined}
             existingImages={editingVehicle?.signed_images ?? []}
+            initialPrimaryImagePath={editingVehicle?.primary_image}
             onSave={handleVehicleSave}
             onCancel={() => { setShowVehicleForm(false); setEditingVehicle(null) }}
           />
@@ -181,10 +187,11 @@ function App() {
             onDelete={(vehicle) => { void handleDeleteVehicle(vehicle) }}
           />
         )}
-        <footer className="list-footer">
-          <span>Private vehicles · {vehicleRecords.length}</span>
-          {mostRecentUpload && <span>Updated {formatDate(mostRecentUpload)}</span>}
-        </footer>
+        {session && (
+          <footer className="list-footer">
+            <span>“The road ahead belongs to those who keep moving.”</span>
+          </footer>
+        )}
       </section>
     </main>
   )

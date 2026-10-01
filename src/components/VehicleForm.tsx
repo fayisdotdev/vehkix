@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react'
 import type { ExistingVehicleImage, VehicleDraft } from '../types/vehicle'
 import '../styles/forms.css'
 import './VehicleForm.css'
@@ -6,8 +6,20 @@ import './VehicleForm.css'
 interface VehicleFormProps {
   initialDraft?: VehicleDraft
   existingImages?: ExistingVehicleImage[]
-  onSave: (draft: VehicleDraft, images: File[], retainedImagePaths: string[]) => Promise<string | null>
+  initialPrimaryImagePath?: string | null
+  onSave: (
+    draft: VehicleDraft,
+    images: File[],
+    retainedImagePaths: string[],
+    primaryImageIndex: number | null,
+  ) => Promise<string | null>
   onCancel: () => void
+}
+
+interface SelectedImage {
+  id: string
+  file: File
+  previewUrl: string
 }
 
 const emptyDraft: VehicleDraft = {
@@ -25,15 +37,31 @@ const emptyDraft: VehicleDraft = {
   next_pucc_date: '',
   insurance_taken_date: '',
   insurance_next_renewal_date: '',
+  rc_owner_name: '',
+  chassis_no: '',
+  engine_no: '',
+  tax_valid_upto: '',
+  registration_validity: '',
 }
 
-function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: VehicleFormProps) {
+function VehicleForm({
+  initialDraft,
+  existingImages = [],
+  initialPrimaryImagePath,
+  onSave,
+  onCancel,
+}: VehicleFormProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const previewUrls = useRef(new Set<string>())
   const [draft, setDraft] = useState<VehicleDraft>(() => initialDraft ?? emptyDraft)
-  const [images, setImages] = useState<File[]>([])
+  const [primaryImageKey, setPrimaryImageKey] = useState(
+    initialPrimaryImagePath ?? existingImages[0]?.path ?? '',
+  )
+  const [images, setImages] = useState<SelectedImage[]>([])
   const [retainedImages, setRetainedImages] = useState<ExistingVehicleImage[]>(existingImages)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -41,6 +69,11 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
     dialog.showModal()
     dialog.querySelector<HTMLInputElement>('input')?.focus()
     return () => dialog.close()
+  }, [])
+
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url))
+    previewUrls.current.clear()
   }, [])
 
   function updateField(field: keyof VehicleDraft, value: string) {
@@ -52,7 +85,17 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
     setSaving(true)
     setError(null)
     try {
-      const message = await onSave(draft, images, retainedImages.map((image) => image.path))
+      const allImages = [
+        ...retainedImages.map((image) => ({ key: image.path })),
+        ...images.map((image) => ({ key: image.id })),
+      ]
+      const primaryIndex = allImages.findIndex((image) => image.key === primaryImageKey)
+      const message = await onSave(
+        draft,
+        images.map((image) => image.file),
+        retainedImages.map((image) => image.path),
+        primaryIndex < 0 ? null : primaryIndex,
+      )
       if (message) setError(message)
     } catch {
       setError('Could not connect to the vehicle service. Try again.')
@@ -61,7 +104,7 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
     }
   }
 
-  function handleImageSelection(event: FormEvent<HTMLInputElement>) {
+  function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget
     const selected = Array.from(input.files ?? [])
     const invalid = selected.find((file) => !file.type.startsWith('image/'))
@@ -76,14 +119,75 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
       input.value = ''
       return
     }
+    const selectedImages = selected.map((file) => {
+      const previewUrl = URL.createObjectURL(file)
+      previewUrls.current.add(previewUrl)
+      return { id: `new:${crypto.randomUUID()}`, file, previewUrl }
+    })
     setError(null)
-    setImages((current) => [...current, ...selected])
+    setImages((current) => [...current, ...selectedImages])
+    if (!primaryImageKey && selectedImages[0]) setPrimaryImageKey(selectedImages[0].id)
     input.value = ''
   }
 
-  function handleDialogClick(event: MouseEvent<HTMLDialogElement>) {
-    if (event.target === dialogRef.current && !saving) onCancel()
+  function hasUnsavedChanges() {
+    const originalDraft = initialDraft ?? emptyDraft
+    const draftChanged = Object.keys(emptyDraft).some((key) =>
+      draft[key as keyof VehicleDraft] !== originalDraft[key as keyof VehicleDraft],
+    )
+    const originalPaths = existingImages.map((image) => image.path)
+    const retainedPaths = retainedImages.map((image) => image.path)
+    return draftChanged
+      || images.length > 0
+      || retainedPaths.length !== originalPaths.length
+      || retainedPaths.some((path, index) => path !== originalPaths[index])
+      || primaryImageKey !== (initialPrimaryImagePath ?? existingImages[0]?.path ?? '')
   }
+
+  function requestClose() {
+    if (saving) return
+    if (hasUnsavedChanges()) {
+      setShowDiscardConfirm(true)
+      return
+    }
+    onCancel()
+  }
+
+  function handleDialogClick(event: MouseEvent<HTMLDialogElement>) {
+    if (event.target === dialogRef.current) requestClose()
+  }
+
+  function removeStoredImage(path: string) {
+    const remaining = retainedImages.filter((image) => image.path !== path)
+    setRetainedImages(remaining)
+    if (primaryImageKey === path) setPrimaryImageKey(remaining[0]?.path ?? images[0]?.id ?? '')
+  }
+
+  function removeSelectedImage(id: string) {
+    const removed = images.find((image) => image.id === id)
+    const remaining = images.filter((image) => image.id !== id)
+    if (removed) {
+      URL.revokeObjectURL(removed.previewUrl)
+      previewUrls.current.delete(removed.previewUrl)
+    }
+    setImages(remaining)
+    if (primaryImageKey === id) setPrimaryImageKey(retainedImages[0]?.path ?? remaining[0]?.id ?? '')
+  }
+
+  const imageEntries = [
+    ...retainedImages.map((image, index) => ({
+      key: image.path,
+      url: image.url,
+      label: `Uploaded image ${index + 1}`,
+      kind: 'stored' as const,
+    })),
+    ...images.map((image) => ({
+      key: image.id,
+      url: image.previewUrl,
+      label: image.file.name,
+      kind: 'selected' as const,
+    })),
+  ]
 
   function field(label: string, name: keyof VehicleDraft, type = 'text') {
     return (
@@ -105,16 +209,19 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
       ref={dialogRef}
       className="vehicle-dialog"
       aria-labelledby="vehicle-form-title"
-      onCancel={(event) => { event.preventDefault(); if (!saving) onCancel() }}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (showDiscardConfirm) setShowDiscardConfirm(false)
+        else requestClose()
+      }}
       onClick={handleDialogClick}
     >
     <form className="vehicle-form" onSubmit={handleSubmit}>
       <div className="form-heading">
         <div>
-          <p className="eyebrow">PRIVATE COLLECTION</p>
           <h2 id="vehicle-form-title">{initialDraft ? 'Edit vehicle' : 'Add a vehicle'}</h2>
         </div>
-        <button className="text-action" type="button" onClick={onCancel} disabled={saving}>
+        <button className="text-action" type="button" onClick={requestClose} disabled={saving}>
           Cancel
         </button>
       </div>
@@ -151,6 +258,17 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
         </div>
       </fieldset>
 
+      <fieldset className="vehicle-fieldset">
+        <legend>RC details</legend>
+        <div className="form-grid">
+          {field('RC owner name', 'rc_owner_name')}
+          {field('Chassis number', 'chassis_no')}
+          {field('Engine number', 'engine_no')}
+          {field('Tax valid up to', 'tax_valid_upto', 'date')}
+          {field('Registration valid up to', 'registration_validity', 'date')}
+        </div>
+      </fieldset>
+
       <div className="form-field image-upload-field">
         <span>Vehicle images</span>
         <div className="file-picker">
@@ -165,34 +283,32 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
           />
           <span>JPG, PNG, WebP or GIF · 10 MB max each</span>
         </div>
-        {retainedImages.length > 0 && (
-          <ul className="selected-files existing-files" aria-label="Uploaded images">
-            {retainedImages.map((image, index) => (
-              <li key={image.path}>
-                {image.url && <img src={image.url} alt="" />}
-                <span>Uploaded image {index + 1}</span>
+        {imageEntries.length > 0 && (
+          <ul className="image-preview-grid" aria-label="Vehicle image previews">
+            {imageEntries.map((image) => (
+              <li className="image-preview" key={image.key}>
+                {image.url
+                  ? <img src={image.url} alt={image.label} />
+                  : <span className="image-preview-placeholder">Preview unavailable</span>}
+                <div className="image-preview-controls">
+                  <label>
+                    <input
+                      type="radio"
+                      name="primary-vehicle-image"
+                      checked={primaryImageKey === image.key}
+                      onChange={() => setPrimaryImageKey(image.key)}
+                    />
+                    <span>Primary</span>
+                  </label>
+                  <span className="image-preview-name" title={image.label}>{image.label}</span>
+                </div>
                 <button
                   type="button"
                   className="remove-file"
-                  aria-label={`Remove uploaded image ${index + 1}`}
-                  onClick={() => setRetainedImages((current) => current.filter((item) => item.path !== image.path))}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {images.length > 0 && (
-          <ul className="selected-files" aria-live="polite">
-            {images.map((image, index) => (
-              <li key={`${image.name}-${image.lastModified}-${index}`}>
-                <span>{image.name}</span>
-                <button
-                  type="button"
-                  className="remove-file"
-                  aria-label={`Remove ${image.name}`}
-                  onClick={() => setImages((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                  aria-label={`Remove ${image.label}`}
+                  onClick={() => image.kind === 'stored'
+                    ? removeStoredImage(image.key)
+                    : removeSelectedImage(image.key)}
                 >
                   Remove
                 </button>
@@ -204,7 +320,7 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
 
       {error && <p className="form-feedback error" role="alert">{error}</p>}
       <div className="form-actions">
-        <button className="text-action" type="button" onClick={onCancel} disabled={saving}>
+        <button className="text-action" type="button" onClick={requestClose} disabled={saving}>
           Cancel
         </button>
         <button className="primary-action" type="submit" disabled={saving}>
@@ -212,6 +328,28 @@ function VehicleForm({ initialDraft, existingImages = [], onSave, onCancel }: Ve
         </button>
       </div>
     </form>
+    {showDiscardConfirm && (
+      <div className="discard-confirm-backdrop" onClick={(event) => event.stopPropagation()}>
+        <section
+          className="discard-confirm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="discard-title"
+          aria-describedby="discard-message"
+        >
+          <h3 id="discard-title">Discard unsaved changes?</h3>
+          <p id="discard-message">Your vehicle details and image choices have not been saved.</p>
+          <div className="discard-actions">
+            <button className="text-action" type="button" onClick={() => setShowDiscardConfirm(false)}>
+              Keep editing
+            </button>
+            <button className="primary-action" type="button" onClick={onCancel}>
+              Discard changes
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
     </dialog>
   )
 }

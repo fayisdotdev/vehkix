@@ -5,11 +5,88 @@
 
 .vehicle-row {
   display: grid;
-  grid-template-columns: minmax(200px, 1.5fr) minmax(135px, 1fr) minmax(135px, 1fr) auto auto;
+  grid-template-columns: 112px minmax(160px, 1.4fr) minmax(120px, 1fr) minmax(120px, 1fr) auto auto;
   align-items: center;
   gap: 16px;
   min-height: 108px;
   border-bottom: 1px solid var(--line);
+}
+
+.vehicle-cover {
+  position: relative;
+  width: 112px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.vehicle-cover > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vehicle-cover-empty {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.carousel-control {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: white;
+  background: rgb(25 31 27 / 68%);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.carousel-control.previous {
+  left: 5px;
+}
+
+.carousel-control.next {
+  right: 5px;
+}
+
+.carousel-control span {
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+}
+
+.carousel-control.previous span {
+  margin-left: 3px;
+  transform: rotate(-135deg);
+}
+
+.carousel-control.next span {
+  margin-right: 3px;
+  transform: rotate(45deg);
+}
+
+.carousel-count {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 2px 5px;
+  border-radius: 2px;
+  color: white;
+  background: rgb(25 31 27 / 72%);
+  font-size: 9px;
 }
 
 .vehicle-main {
@@ -257,14 +334,21 @@
 @media (max-width: 760px) {
   .vehicle-row {
     position: relative;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 96px minmax(0, 1fr);
     gap: 18px 12px;
     padding: 19px 0;
   }
 
+  .vehicle-cover {
+    width: 96px;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .vehicle-main {
-    grid-column: 1 / -1;
-    padding-right: 92px;
+    grid-column: 2;
+    grid-row: 1;
+    padding-right: 84px;
   }
 
   .status-cell {

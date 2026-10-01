@@ -69,6 +69,14 @@ create table if not exists public.user_vehicles (
   created_at timestamptz not null default now()
 );
 
+alter table public.user_vehicles
+  add column if not exists rc_owner_name text,
+  add column if not exists chassis_no text,
+  add column if not exists engine_no text,
+  add column if not exists tax_valid_upto date,
+  add column if not exists registration_validity date,
+  add column if not exists primary_image text;
+
 create index if not exists user_vehicles_user_created_idx
   on public.user_vehicles (user_id, created_at desc);
 

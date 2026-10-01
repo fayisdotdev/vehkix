@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { displayValue, formatDate, getDueMessage, getVehicleStatus } from '../lib/vehicle'
-import type { Vehicle } from '../types/vehicle'
+import type { ExistingVehicleImage, Vehicle } from '../types/vehicle'
 import './VehicleList.css'
 
 interface VehicleListProps {
@@ -21,6 +22,8 @@ function VehicleList({
   onEdit,
   onDelete,
 }: VehicleListProps) {
+  const [imageIndices, setImageIndices] = useState<Record<string, number>>({})
+
   if (vehicles.length === 0) {
     return (
       <p className="empty-state">
@@ -45,11 +48,64 @@ function VehicleList({
           .sort((first, second) => first.date.localeCompare(second.date))
         const nextDocument = documents[0]
         const images = vehicle.images ?? []
+        const carouselImages = vehicle.signed_images?.filter(
+          (image): image is ExistingVehicleImage & { url: string } => Boolean(image.url),
+        ) ?? images.map((url, index) => ({
+          path: vehicle.image_paths?.[index] ?? String(index),
+          url,
+        }))
+        const carouselKey = `${vehicle.id}:${vehicle.primary_image ?? ''}`
+        const primaryImageIndex = Math.max(
+          0,
+          carouselImages.findIndex((image) => image.path === vehicle.primary_image),
+        )
+        const activeImageIndex = Math.min(
+          imageIndices[carouselKey] ?? primaryImageIndex,
+          Math.max(0, carouselImages.length - 1),
+        )
         const isExpanded = expandedVehicleId === vehicle.id
         const detailsId = `details-${vehicle.id}`
 
         return (
           <article className="vehicle-row" key={vehicle.id} role="listitem">
+            <div className="vehicle-cover">
+              {carouselImages.length > 0 ? (
+                <>
+                  <img src={carouselImages[activeImageIndex].url} alt={`${vehicleName} vehicle`} />
+                  {carouselImages.length > 1 && (
+                    <>
+                      <button
+                        className="carousel-control previous"
+                        type="button"
+                        aria-label={`Previous ${vehicleName} image`}
+                        onClick={() => setImageIndices((current) => ({
+                          ...current,
+                          [carouselKey]: (activeImageIndex - 1 + carouselImages.length) % carouselImages.length,
+                        }))}
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                      <button
+                        className="carousel-control next"
+                        type="button"
+                        aria-label={`Next ${vehicleName} image`}
+                        onClick={() => setImageIndices((current) => ({
+                          ...current,
+                          [carouselKey]: (activeImageIndex + 1) % carouselImages.length,
+                        }))}
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                      <span className="carousel-count" aria-live="polite">
+                        {activeImageIndex + 1} / {carouselImages.length}
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <span className="vehicle-cover-empty">No image</span>
+              )}
+            </div>
             <div className="vehicle-main">
               <span className="vehicle-id">{vehicle.vehicle_number || vehicle.id}</span>
               <h2>{vehicleName}</h2>
@@ -120,6 +176,11 @@ function VehicleList({
                   <div><dt>Model</dt><dd>{displayValue(vehicle.model)}</dd></div>
                   <div><dt>Year</dt><dd>{displayValue(vehicle.year)}</dd></div>
                   <div><dt>Added to garage</dt><dd>{formatDate(vehicle.taken_date)}</dd></div>
+                  <div><dt>RC owner name</dt><dd>{displayValue(vehicle.rc_owner_name)}</dd></div>
+                  <div><dt>Chassis number</dt><dd>{displayValue(vehicle.chassis_no)}</dd></div>
+                  <div><dt>Engine number</dt><dd>{displayValue(vehicle.engine_no)}</dd></div>
+                  <div><dt>Tax valid up to</dt><dd>{formatDate(vehicle.tax_valid_upto)}</dd></div>
+                  <div><dt>Registration valid up to</dt><dd>{formatDate(vehicle.registration_validity)}</dd></div>
                 </dl>
               </div>
               <div className="detail-group">

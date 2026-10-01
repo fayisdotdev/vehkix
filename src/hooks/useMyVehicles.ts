@@ -40,6 +40,11 @@ function toDatabasePayload(draft: VehicleDraft, username: string | null) {
     next_pucc_date: nullableText(draft.next_pucc_date),
     insurance_taken_date: nullableText(draft.insurance_taken_date),
     insurance_next_renewal_date: nullableText(draft.insurance_next_renewal_date),
+    rc_owner_name: nullableText(draft.rc_owner_name),
+    chassis_no: nullableText(draft.chassis_no),
+    engine_no: nullableText(draft.engine_no),
+    tax_valid_upto: nullableText(draft.tax_valid_upto),
+    registration_validity: nullableText(draft.registration_validity),
     uploaded_by: username,
   }
 }
@@ -110,6 +115,7 @@ export function useMyVehicles(session: Session | null) {
     draft: VehicleDraft,
     images: File[],
     retainedImagePaths: string[],
+    primaryImageIndex: number | null,
     editingVehicleId?: string,
   ): Promise<string | null> {
     if (!supabaseClient || !session) return 'Sign in before saving a vehicle.'
@@ -144,9 +150,13 @@ export function useMyVehicles(session: Session | null) {
       }
 
       const imagePaths = [...keptImagePaths, ...uploadedPaths]
+      const primaryImagePath = primaryImageIndex == null
+        ? imagePaths[0] ?? null
+        : imagePaths[primaryImageIndex] ?? null
       const payload = {
         ...toDatabasePayload(draft, session.user.user_metadata.username || session.user.email || null),
         images: imagePaths,
+        primary_image: primaryImagePath,
       }
       const result = editingVehicle
         ? await client

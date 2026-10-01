@@ -6,6 +6,11 @@ export interface Vehicle {
   company?: string | null
   year?: number | null
   taken_date?: string | null
+  rc_owner_name?: string | null
+  chassis_no?: string | null
+  engine_no?: string | null
+  tax_valid_upto?: string | null
+  registration_validity?: string | null
   service?: {
     last_service_date?: string | null
     last_service_km?: number | null
@@ -34,6 +39,7 @@ export interface Vehicle {
   images?: string[] | null
   image_paths?: string[]
   signed_images?: ExistingVehicleImage[]
+  primary_image?: string | null
 }
 
 export interface VehicleDraft {
@@ -51,6 +57,11 @@ export interface VehicleDraft {
   next_pucc_date: string
   insurance_taken_date: string
   insurance_next_renewal_date: string
+  rc_owner_name: string
+  chassis_no: string
+  engine_no: string
+  tax_valid_upto: string
+  registration_validity: string
 }
 
 export interface ExistingVehicleImage {
