@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import brandWordmark from '../../images/logo/vehkix-wordmark-color.png'
+import brandWordmark from '../../images/logo/vehkix-wordmark-color-transparent.png'
 import { displayValue, formatDate, getDueMessage, getVehicleStatus } from '../lib/vehicle'
 import type { ExistingVehicleImage, Vehicle } from '../types/vehicle'
 import './VehicleList.css'
@@ -127,24 +127,56 @@ function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose 
   }, [])
 
   useEffect(() => {
-    if (!printDocument) return
-    const previousTitle = document.title
-    const finishPrint = () => onClose()
-    document.title = printDocument.vehicleName
-    document.body.classList.add('vehicle-printing')
-    window.addEventListener('afterprint', finishPrint, { once: true })
-    const frame = window.requestAnimationFrame(() => {
-      dialogRef.current?.close()
-      window.print()
-    })
+  if (!printDocument) return
 
-    return () => {
-      window.cancelAnimationFrame(frame)
-      window.removeEventListener('afterprint', finishPrint)
-      document.body.classList.remove('vehicle-printing')
-      document.title = previousTitle
+  const previousTitle = document.title
+  document.title = printDocument.vehicleName
+  document.body.classList.add('vehicle-printing')
+
+  const finishPrint = () => {
+    onClose()
+  }
+
+  window.addEventListener('afterprint', finishPrint, { once: true })
+
+  const print = async () => {
+    const logo = document.querySelector<HTMLImageElement>(
+      '.vehicle-print-logo img'
+    )
+
+    if (logo) {
+      if (!logo.complete) {
+        await new Promise<void>((resolve) => {
+          logo.addEventListener('load', () => resolve(), { once: true })
+          logo.addEventListener('error', () => resolve(), { once: true })
+        })
+      }
+
+      if (logo.decode) {
+        try {
+          await logo.decode()
+        } catch {
+          // Continue printing even if decode is unavailable
+        }
+      }
     }
-  }, [onClose, printDocument])
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        dialogRef.current?.close()
+        window.print()
+      })
+    })
+  }
+
+  print()
+
+  return () => {
+    window.removeEventListener('afterprint', finishPrint)
+    document.body.classList.remove('vehicle-printing')
+    document.title = previousTitle
+  }
+}, [onClose, printDocument])
 
   function handlePrint() {
     setPrintDocument({
