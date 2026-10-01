@@ -291,6 +291,28 @@
   font-weight: 400;
 }
 
+.due-info-group {
+  grid-column: 1 / -1;
+}
+
+.due-info-group dl {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.due-info-group dd .upcoming {
+  color: var(--green);
+}
+
+.due-info-group dd .overdue {
+  color: #a3342e;
+}
+
+.due-info-group > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .detail-group dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

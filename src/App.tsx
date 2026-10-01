@@ -9,13 +9,14 @@ import VehicleList from './components/VehicleList'
 import { useAdminAccess } from './hooks/useAdminAccess'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useMyVehicles } from './hooks/useMyVehicles'
-import { getNextDue, toVehicleDraft } from './lib/vehicle'
+import { formatDate, getDueItems, toVehicleDraft } from './lib/vehicle'
 import type { Vehicle, VehicleDraft } from './types/vehicle'
 import './styles/page.css'
 
 function App() {
   const [activeView, setActiveView] = useState<'collection' | 'admin'>('collection')
   const [query, setQuery] = useState('')
+  const [showDueVehicles, setShowDueVehicles] = useState(false)
   const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null)
   const [showVehicleForm, setShowVehicleForm] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
@@ -71,10 +72,13 @@ function App() {
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   )
-  const attentionCount = vehicleRecords.filter((vehicle) => {
-    const nextDue = getNextDue(vehicle)
-    return nextDue !== null && nextDue.days <= 10
-  }).length
+  const dueVehicles = vehicleRecords
+    .map((vehicle) => ({
+      vehicle,
+      items: getDueItems(vehicle).filter((item) => item.days <= 10),
+    }))
+    .filter(({ items }) => items.length > 0)
+  const attentionCount = dueVehicles.length
   const username = session?.user.user_metadata.username || session?.user.email || ''
   const connectionState = !supabaseClient ? 'error' : !authReady ? 'connecting' : 'live'
 
@@ -126,13 +130,55 @@ function App() {
                 <span>vehicles</span>
               </div>
               <div className="summary-divider" />
-              <div className="summary-item">
+              <button
+                className="summary-item due-summary-toggle"
+                type="button"
+                aria-expanded={showDueVehicles}
+                aria-controls="due-vehicle-list"
+                onClick={() => setShowDueVehicles((visible) => !visible)}
+              >
                 <strong>{String(attentionCount).padStart(2, '0')}</strong>
                 <span>due within 10 days</span>
-              </div>
+              </button>
             </div>
           )}
         </div>
+
+        {session && !adminView && showDueVehicles && (
+          <section className="due-summary-panel" id="due-vehicle-list" aria-labelledby="due-summary-title">
+            <div className="due-summary-heading">
+              <h2 id="due-summary-title">Due within 10 days</h2>
+              <span>{attentionCount} {attentionCount === 1 ? 'vehicle' : 'vehicles'}</span>
+            </div>
+            {dueVehicles.length > 0 ? (
+              <ul className="due-vehicle-list">
+                {dueVehicles.map(({ vehicle, items }) => (
+                  <li className="due-vehicle" key={vehicle.id}>
+                    <div className="due-vehicle-heading">
+                      <strong>{vehicle.name || 'Unnamed vehicle'}</strong>
+                      <span>{vehicle.vehicle_number || vehicle.id}</span>
+                    </div>
+                    <ul className="due-item-list">
+                      {items.map(({ label, date, days }) => (
+                        <li className="due-item" key={label}>
+                          <span>{label}</span>
+                          <strong>{formatDate(date)}</strong>
+                          <span className={days < 0 ? 'overdue' : 'upcoming'}>
+                            {days < 0
+                              ? `${Math.abs(days)} ${Math.abs(days) === 1 ? 'day' : 'days'} overdue`
+                              : days === 0 ? 'Due today' : days === 1 ? 'Due in 1 day' : `Due in ${days} days`}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="due-summary-empty">No vehicles are due within 10 days.</p>
+            )}
+          </section>
+        )}
 
         {!session && authReady && supabaseClient && (
           <AuthPanel onSubmit={submitAuth} />

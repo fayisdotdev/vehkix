@@ -46,7 +46,7 @@ export function daysUntil(value?: string | null) {
   return Math.ceil((date.getTime() - today.getTime()) / 86400000)
 }
 
-export function getNextDue(vehicle: Vehicle) {
+export function getDueItems(vehicle: Vehicle) {
   return [
     { label: 'Service', date: vehicle.service?.next_service_date },
     { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
@@ -56,7 +56,11 @@ export function getNextDue(vehicle: Vehicle) {
   ]
     .filter((item): item is { label: string; date: string } => Boolean(item.date))
     .map((item) => ({ ...item, days: daysUntil(item.date) }))
-    .sort((first, second) => first.days - second.days)[0] ?? null
+    .sort((first, second) => first.days - second.days)
+}
+
+export function getNextDue(vehicle: Vehicle) {
+  return getDueItems(vehicle)[0] ?? null
 }
 
 export function getVehicleStatus(vehicle: Vehicle) {
@@ -73,6 +77,7 @@ export function getDueMessage(vehicle: Vehicle) {
   if (!nextDue || nextDue.days > 10) return null
   if (nextDue.days < 0) return `${nextDue.label} overdue by ${Math.abs(nextDue.days)} days`
   if (nextDue.days === 0) return `${nextDue.label} due today`
+  if (nextDue.days === 1) return `${nextDue.label} due in 1 day`
   return `${nextDue.label} due in ${nextDue.days} days`
 }
 

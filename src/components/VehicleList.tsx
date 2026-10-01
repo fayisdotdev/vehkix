@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { displayValue, formatDate, getDueMessage, getVehicleStatus } from '../lib/vehicle'
+import { displayValue, formatDate, getDueItems, getDueMessage, getVehicleStatus } from '../lib/vehicle'
 import type { ExistingVehicleImage, Vehicle } from '../types/vehicle'
 import './VehicleList.css'
 
@@ -42,6 +42,7 @@ function VehicleList({
         const vehicleName = vehicle.name || 'Unnamed vehicle'
         const status = getVehicleStatus(vehicle)
         const dueMessage = getDueMessage(vehicle)
+        const dueItems = getDueItems(vehicle).filter((item) => item.days <= 10)
         const documents = [
           { label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
           { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
@@ -172,6 +173,28 @@ function VehicleList({
               aria-label={`${vehicleName} details`}
               hidden={!isExpanded}
             >
+              <div className="detail-group due-info-group">
+                <h3>Due within 10 days</h3>
+                {dueItems.length > 0 ? (
+                  <dl>
+                    {dueItems.map(({ label, date, days }) => (
+                      <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>
+                          {formatDate(date)}
+                          <span className={days < 0 ? 'overdue' : 'upcoming'}>
+                            {days < 0
+                              ? ` · ${Math.abs(days)} ${Math.abs(days) === 1 ? 'day' : 'days'} overdue`
+                              : days === 0 ? ' · Due today' : days === 1 ? ' · Due in 1 day' : ` · Due in ${days} days`}
+                          </span>
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p>No items due within 10 days.</p>
+                )}
+              </div>
               <div className="detail-group vehicle-info-group">
                 <h3>Vehicle</h3>
                 <dl>
