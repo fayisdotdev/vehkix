@@ -6,6 +6,13 @@ const dateFormatter = new Intl.DateTimeFormat('en', {
   year: 'numeric',
 })
 
+interface UpcomingDocument {
+  id: string
+  summaryLabel: string
+  label: string
+  date?: string | null
+}
+
 function parseDate(value?: string | null) {
   if (!value) return null
   const date = new Date(`${value}T00:00:00`)
@@ -59,6 +66,37 @@ export function getDueItems(vehicle: Vehicle) {
     .sort((first, second) => first.days - second.days)
 }
 
+export function getUpcomingDocuments(vehicle: Vehicle) {
+  return [
+    {
+      id: 'insurance-renewal',
+      summaryLabel: 'Insurance renewal',
+      label: 'Insurance renewal',
+      date: vehicle.insurance?.next_renewal_date,
+    },
+    {
+      id: 'next-pucc',
+      summaryLabel: 'PUCC renewal',
+      label: 'Next PUCC renewal',
+      date: vehicle.pucc?.next_pucc_date,
+    },
+    {
+      id: 'tax-validity',
+      summaryLabel: 'Tax validity',
+      label: 'Tax valid up to',
+      date: vehicle.tax_valid_upto,
+    },
+    {
+      id: 'registration-validity',
+      summaryLabel: 'Registration validity',
+      label: 'Registration valid up to',
+      date: vehicle.registration_validity,
+    },
+  ]
+    .filter((document): document is UpcomingDocument & { date: string } => Boolean(document.date))
+    .sort((first, second) => first.date.localeCompare(second.date))
+}
+
 export function getNextDue(vehicle: Vehicle) {
   return getDueItems(vehicle)[0] ?? null
 }
@@ -83,6 +121,10 @@ export function getDueMessage(vehicle: Vehicle) {
 
 export function displayValue(value?: string | number | null) {
   return value === undefined || value === null || value === '' ? 'Not set' : value
+}
+
+export function formatMileage(value?: number | null) {
+  return value == null ? 'Not set' : `${value.toLocaleString()} km`
 }
 
 export function toVehicleDraft(vehicle: Vehicle): VehicleDraft {

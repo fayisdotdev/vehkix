@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { displayValue, formatDate, getDueMessage, getVehicleStatus } from '../lib/vehicle'
+import { displayValue, formatDate, formatMileage, getDueMessage, getUpcomingDocuments, getVehicleStatus } from '../lib/vehicle'
 import type { ExistingVehicleImage, Vehicle } from '../types/vehicle'
 import VehicleShareDialog from './VehicleShareDialog'
 import { createShareSections } from './vehicleShare'
@@ -45,15 +45,7 @@ function VehicleList({
         const vehicleName = vehicle.name || 'Unnamed vehicle'
         const status = getVehicleStatus(vehicle)
         const dueMessage = getDueMessage(vehicle)
-        const documents = [
-          { label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
-          { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
-          { label: 'Tax', date: vehicle.tax_valid_upto },
-          { label: 'Registration', date: vehicle.registration_validity },
-        ]
-          .filter((document): document is { label: string; date: string } => Boolean(document.date))
-          .sort((first, second) => first.date.localeCompare(second.date))
-        const nextDocument = documents[0]
+        const [nextDocument] = getUpcomingDocuments(vehicle)
         const images = vehicle.images ?? []
         const carouselImages = vehicle.signed_images?.filter(
           (image): image is ExistingVehicleImage & { url: string } => Boolean(image.url),
@@ -134,7 +126,7 @@ function VehicleList({
             <div className="vehicle-detail document-detail">
               <span className="detail-label">NEXT DOCUMENT</span>
               <strong>{formatDate(nextDocument?.date)}</strong>
-              <span>{nextDocument ? `${nextDocument.label} renewal` : 'No renewal date'}</span>
+              <span>{nextDocument?.summaryLabel ?? 'No renewal date'}</span>
             </div>
             <div className="status-cell">
               <span className={`status ${status.className}`}>
@@ -182,42 +174,34 @@ function VehicleList({
                 <h3>Vehicle</h3>
                 <dl>
                   <div><dt>Vehicle number</dt><dd>{displayValue(vehicle.vehicle_number)}</dd></div>
-                  <div><dt>Record ID</dt><dd>{vehicle.id}</dd></div>
                   <div><dt>Make</dt><dd>{displayValue(vehicle.company)}</dd></div>
                   <div><dt>Model</dt><dd>{displayValue(vehicle.model)}</dd></div>
                   <div><dt>Year</dt><dd>{displayValue(vehicle.year)}</dd></div>
                   <div><dt>Added to garage</dt><dd>{formatDate(vehicle.taken_date)}</dd></div>
                   {showOwner && <div><dt>Owner</dt><dd>{vehicle.owner_username || vehicle.user_id}</dd></div>}
+                  <div><dt>Record ID</dt><dd>{vehicle.id}</dd></div>
                 </dl>
               </div>
               <div className="detail-group service-info-group">
                 <h3>Service</h3>
                 <dl>
-                  <div><dt>Last service</dt><dd>{formatDate(vehicle.service?.last_service_date)}</dd></div>
-                  <div><dt>Last mileage</dt><dd>{vehicle.service?.last_service_km?.toLocaleString() ?? 'Not set'}{vehicle.service?.last_service_km == null ? '' : ' km'}</dd></div>
                   <div><dt>Next service</dt><dd>{formatDate(vehicle.service?.next_service_date)}</dd></div>
-                  <div><dt>Next service mileage</dt><dd>{vehicle.service?.next_service_km?.toLocaleString() ?? 'Not set'}{vehicle.service?.next_service_km == null ? '' : ' km'}</dd></div>
+                  <div><dt>Next service mileage</dt><dd>{formatMileage(vehicle.service?.next_service_km)}</dd></div>
+                  <div><dt>Last service</dt><dd>{formatDate(vehicle.service?.last_service_date)}</dd></div>
+                  <div><dt>Last mileage</dt><dd>{formatMileage(vehicle.service?.last_service_km)}</dd></div>
                 </dl>
               </div>
               <div className="detail-group paperwork-info-group">
                 <h3>Registration &amp; documents</h3>
                 <dl>
+                  {getUpcomingDocuments(vehicle).map((document) => (
+                    <div key={document.id}><dt>{document.label}</dt><dd>{formatDate(document.date)}</dd></div>
+                  ))}
                   <div><dt>RC owner name</dt><dd>{displayValue(vehicle.rc_owner_name)}</dd></div>
                   <div><dt>Chassis number</dt><dd>{displayValue(vehicle.chassis_no)}</dd></div>
                   <div><dt>Engine number</dt><dd>{displayValue(vehicle.engine_no)}</dd></div>
-                  <div><dt>Tax valid up to</dt><dd>{formatDate(vehicle.tax_valid_upto)}</dd></div>
-                  <div><dt>Registration valid up to</dt><dd>{formatDate(vehicle.registration_validity)}</dd></div>
                   <div><dt>Last check</dt><dd>{formatDate(vehicle.pucc?.last_pucc_date)}</dd></div>
-                  <div><dt>Next PUCC renewal</dt><dd>{formatDate(vehicle.pucc?.next_pucc_date)}</dd></div>
                   <div><dt>Policy date</dt><dd>{formatDate(vehicle.insurance?.taken_date)}</dd></div>
-                  <div><dt>Insurance renewal</dt><dd>{formatDate(vehicle.insurance?.next_renewal_date)}</dd></div>
-                </dl>
-              </div>
-              <div className="detail-group record-info-group">
-                <h3>Record</h3>
-                <dl>
-                  <div><dt>Uploaded by</dt><dd>{displayValue(vehicle.uploaded_by)}</dd></div>
-                  <div><dt>Uploaded on</dt><dd>{formatDate(vehicle.uploaded_date)}</dd></div>
                 </dl>
               </div>
               <div className="detail-group photo-info-group">
@@ -234,6 +218,13 @@ function VehicleList({
                     ))}
                   </ul>
                 ) : <p>No photos have been added.</p>}
+              </div>
+              <div className="detail-group record-info-group">
+                <h3>Record</h3>
+                <dl>
+                  <div><dt>Uploaded by</dt><dd>{displayValue(vehicle.uploaded_by)}</dd></div>
+                  <div><dt>Uploaded on</dt><dd>{formatDate(vehicle.uploaded_date)}</dd></div>
+                </dl>
               </div>
             </section>
               {sharingVehicleId === vehicle.id && (

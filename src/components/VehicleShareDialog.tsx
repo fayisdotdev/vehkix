@@ -8,12 +8,6 @@ interface PrintDocument {
   sections: ShareSection[]
 }
 
-interface PrintDocument {
-  vehicleName: string
-  vehicleIdentifier: string
-  sections: ShareSection[]
-}
-
 interface VehicleShareDialogProps {
   vehicleName: string
   vehicleIdentifier: string
