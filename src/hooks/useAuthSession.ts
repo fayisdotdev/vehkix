@@ -7,6 +7,7 @@ export function useAuthSession() {
   const [session, setSession] = useState<Session | null>(null)
   const [isReady, setIsReady] = useState(!supabaseClient)
   const [error, setError] = useState<string | null>(null)
+  const [profileSyncState, setProfileSyncState] = useState<{ userId: string; error: string } | null>(null)
 
   useEffect(() => {
     if (!supabaseClient) return
@@ -36,6 +37,33 @@ export function useAuthSession() {
       subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (!supabaseClient || !session?.user.id) return
+
+    const client = supabaseClient
+    const userId = session.user.id
+    let isCurrent = true
+
+    async function syncProfile() {
+      try {
+        const { error: syncError } = await client.rpc('sync_my_profile')
+        if (!isCurrent) return
+        setProfileSyncState(syncError
+          ? { userId, error: 'Could not sync your profile email. Run the latest user-account SQL setup.' }
+          : null)
+      } catch {
+        if (isCurrent) {
+          setProfileSyncState({ userId, error: 'Could not sync your profile email. Run the latest user-account SQL setup.' })
+        }
+      }
+    }
+
+    void syncProfile()
+    return () => {
+      isCurrent = false
+    }
+  }, [session?.user.id])
 
   async function submitAuth(mode: AuthMode, values: AuthValues): Promise<AuthFeedback> {
     if (!supabaseClient) {
@@ -89,5 +117,9 @@ export function useAuthSession() {
     return signOutError ? 'Could not sign out. Please try again.' : null
   }
 
-  return { session, isReady, error, submitAuth, signOut }
+  const profileSyncError = profileSyncState?.userId === session?.user.id
+    ? profileSyncState?.error ?? null
+    : null
+
+  return { session, isReady, error, profileSyncError, submitAuth, signOut }
 }

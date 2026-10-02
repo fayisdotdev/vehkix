@@ -108,6 +108,50 @@ create trigger on_auth_user_email_updated
   after update of email on auth.users
   for each row execute function public.sync_profile_email();
 
+create or replace function public.sync_my_profile()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  auth_email text;
+  auth_username text;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication is required';
+  end if;
+
+  select email, btrim(raw_user_meta_data ->> 'username')
+  into auth_email, auth_username
+  from auth.users
+  where id = current_user_id;
+
+  if not found then
+    raise exception 'Authenticated user was not found';
+  end if;
+
+  update public.profiles
+  set email = auth_email
+  where id = current_user_id;
+
+  if not found then
+    if auth_username is null or auth_username !~ '^[A-Za-z0-9_]{3,32}$' then
+      raise exception 'Profile username is invalid';
+    end if;
+
+    insert into public.profiles (id, username, email)
+    values (current_user_id, auth_username, auth_email)
+    on conflict (id) do update
+      set email = excluded.email;
+  end if;
+end;
+$$;
+
+revoke all on function public.sync_my_profile() from public, anon;
+grant execute on function public.sync_my_profile() to authenticated;
+
 create table if not exists public.user_vehicles (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -195,53 +239,7 @@ create policy user_vehicles_delete_admin
   to authenticated
   using ((select public.is_admin()));
 
-grant select, insert, update, delete on public.user_vehicles to authenticated;create table if not exists public.profiles (
-  id uuid primary key references auth.users (id) on delete cascade,
-  username text not null,
-  created_at timestamptz not null default now(),
-  constraint profiles_username_format check (username ~ '^[A-Za-z0-9_]{3,32}$')
-);
-
-create unique index if not exists profiles_username_unique_ci
-  on public.profiles (lower(username));
-
-alter table public.profiles enable row level security;
-
-drop policy if exists profiles_read_self on public.profiles;
-create policy profiles_read_self
-  on public.profiles
-  for select
-  to authenticated
-  using (id = (select auth.uid()));
-
-grant select on public.profiles to authenticated;
-
-create or replace function public.create_profile_for_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  requested_username text;
-begin
-  requested_username := btrim(new.raw_user_meta_data ->> 'username');
-
-  if requested_username is null or requested_username !~ '^[A-Za-z0-9_]{3,32}$' then
-    raise exception 'Username must contain 3 to 32 letters, numbers, or underscores';
-  end if;
-
-  insert into public.profiles (id, username)
-  values (new.id, requested_username);
-
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created_profile on auth.users;
-create trigger on_auth_user_created_profile
-  after insert on auth.users
-  for each row execute function public.create_profile_for_new_user();
+grant select, insert, update, delete on public.user_vehicles to authenticated;
 
 create table if not exists public.user_vehicles (
   id uuid primary key default gen_random_uuid(),

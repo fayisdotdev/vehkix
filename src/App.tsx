@@ -24,7 +24,14 @@ function App() {
   const [showVehicleForm, setShowVehicleForm] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
   const [adminSection, setAdminSection] = useState<AdminSection>('overview')
-  const { session, isReady: authReady, error: authError, submitAuth, signOut } = useAuthSession()
+  const {
+    session,
+    isReady: authReady,
+    error: authError,
+    profileSyncError,
+    submitAuth,
+    signOut,
+  } = useAuthSession()
   const { isAdmin, loading: adminAccessLoading, error: adminAccessError } = useAdminAccess(session)
   const {
     settings: fieldSettings,
@@ -343,9 +350,9 @@ function App() {
         {session && !adminView && myVehiclesLoading && (
           <p className="empty-state" role="status">Loading your collection…</p>
         )}
-        {(authError || (session && !adminView && myVehiclesError) || (session && adminAccessError) || actionError) && (
+        {(authError || profileSyncError || (session && !adminView && myVehiclesError) || (session && adminAccessError) || actionError) && (
           <p className="empty-state error-state" role="alert">
-            {authError || myVehiclesError || adminAccessError || actionError}
+            {authError || profileSyncError || myVehiclesError || adminAccessError || actionError}
           </p>
         )}
 
