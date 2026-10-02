@@ -17,6 +17,30 @@ where profile.id = auth_user.id
 create unique index if not exists profiles_username_unique_ci
   on public.profiles (lower(username));
 
+with candidate_profiles as (
+  select distinct on (lower(btrim(auth_user.raw_user_meta_data ->> 'username')))
+    auth_user.id,
+    btrim(auth_user.raw_user_meta_data ->> 'username') as username,
+    auth_user.email
+  from auth.users as auth_user
+  where btrim(auth_user.raw_user_meta_data ->> 'username') ~ '^[A-Za-z0-9_]{3,32}$'
+  order by
+    lower(btrim(auth_user.raw_user_meta_data ->> 'username')),
+    auth_user.created_at,
+    auth_user.id
+)
+insert into public.profiles (id, username, email)
+select candidate.id, candidate.username, candidate.email
+from candidate_profiles as candidate
+where not exists (
+  select 1
+  from public.profiles as existing
+  where existing.id = candidate.id
+    or lower(existing.username) = lower(candidate.username)
+)
+on conflict (id) do update
+  set email = excluded.email;
+
 alter table public.profiles enable row level security;
 
 drop policy if exists profiles_read_self on public.profiles;
@@ -302,17 +326,20 @@ create table if not exists public.vehicle_field_visibility (
   show_in_form boolean not null default true,
   show_in_details boolean not null default true,
   allow_share boolean not null default true,
-  updated_at timestamptz not null default now(),
-  constraint vehicle_field_visibility_key check (field_key in (
+  updated_at timestamptz not null default now()
+);
+
+alter table public.vehicle_field_visibility
+  drop constraint if exists vehicle_field_visibility_key;
+alter table public.vehicle_field_visibility
+  add constraint vehicle_field_visibility_key check (field_key in (
     'vehicle_title', 'vehicle_number', 'company', 'model', 'year', 'taken_date',
     'last_service_date', 'last_service_km', 'next_service_date', 'next_service_km',
     'next_pucc_date', 'insurance_next_renewal_date', 'tax_valid_upto',
     'registration_validity', 'last_pucc_date', 'insurance_taken_date',
     'rc_owner_name', 'chassis_no', 'engine_no', 'images', 'owner_username',
     'print_timestamp', 'id', 'uploaded_by', 'uploaded_date'
-    'print_timestamp'
-  ))
-);
+  ));
 
 insert into public.vehicle_field_visibility (field_key, show_in_form, show_in_details, allow_share)
 values
