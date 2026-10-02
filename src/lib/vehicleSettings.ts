@@ -20,6 +20,8 @@ export const vehicleFieldDefinitions = [
   { key: 'engine_no', label: 'Engine number', group: 'RC details', form: true, details: true, share: true },
   { key: 'images', label: 'Vehicle photos', group: 'Photos', form: true, details: true, share: true },
   { key: 'owner_username', label: 'Vehicle owner', group: 'Record', form: false, details: true, share: true },
+  { key: 'print_timestamp', label: 'Print timestamp', group: 'Record', form: false, details: false, share: true },
+  { key: 'print_timestamp', label: 'Print timestamp', group: 'Record', form: false, details: false, share: true },
   { key: 'id', label: 'Record ID', group: 'Record', form: false, details: false, share: false },
   { key: 'uploaded_by', label: 'Uploaded by', group: 'Record', form: false, details: false, share: false },
   { key: 'uploaded_date', label: 'Uploaded on', group: 'Record', form: false, details: false, share: false },

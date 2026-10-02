@@ -7,6 +7,7 @@ import type { ShareSection } from './vehicleShare'
 interface PrintDocument {
   vehicleName: string
   vehicleIdentifier: string
+  printTimestamp: string | null
   orientation: 'portrait' | 'landscape'
   sections: ShareSection[]
 }
@@ -43,7 +44,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
     if (!printDocument) return
 
     const previousTitle = document.title
-    document.title = printDocument.vehicleName || printDocument.vehicleIdentifier || 'Vehicle record'
+    document.title = ''
     document.body.classList.add('vehicle-printing', `vehicle-printing-${printDocument.orientation}`)
 
     const finishPrint = () => onClose()
@@ -95,14 +96,22 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
     ) ?? availableFields.find(
       (field) => field.id === 'record-id' && selectedFieldIds.includes(field.id),
     )
+    const printTimestamp = selectedFieldIds.includes('print-timestamp')
+      ? new Date().toISOString()
+      : null
     setPrintDocument({
       vehicleName: selectedTitle && selectedFieldIds.includes(selectedTitle.id) ? selectedTitle.value : '',
       vehicleIdentifier: selectedIdentifier?.value ?? '',
+      printTimestamp,
       orientation,
       sections: sections
         .map((section) => ({
           ...section,
-          fields: section.fields.filter((field) => field.id !== 'vehicle-title' && selectedFieldIds.includes(field.id)),
+          fields: section.fields.filter((field) => (
+            field.id !== 'vehicle-title'
+            && field.id !== 'print-timestamp'
+            && selectedFieldIds.includes(field.id)
+          )),
         }))
         .filter((section) => section.fields.length > 0),
     })
@@ -231,6 +240,12 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
             <p>VEHICLE RECORD</p>
             {printDocument.vehicleName && <h1>{printDocument.vehicleName}</h1>}
             {printDocument.vehicleIdentifier && <span>{printDocument.vehicleIdentifier}</span>}
+            {printDocument.printTimestamp && (
+              <time className="vehicle-print-timestamp" dateTime={printDocument.printTimestamp}>
+                Printed {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                  .format(new Date(printDocument.printTimestamp))}
+              </time>
+            )}
           </header>
           {printDocument.sections.map((section) => (
             <section className="vehicle-print-section" key={section.title}>

@@ -95,6 +95,7 @@ export function createShareSections(
     {
       title: 'Record',
       fields: [
+        { id: 'print-timestamp', label: 'Print timestamp', value: 'Include the date and time of printing' },
         { id: 'uploaded-by', label: 'Uploaded by', value: String(displayValue(vehicle.uploaded_by)) },
         { id: 'uploaded-on', label: 'Uploaded on', value: formatDate(vehicle.uploaded_date) },
       ],
@@ -115,6 +116,7 @@ const shareSettingKeys: Record<string, VehicleFieldKey> = {
   'vehicle-number': 'vehicle_number',
   'record-id': 'id',
   owner: 'owner_username',
+  'print-timestamp': 'print_timestamp',
   make: 'company',
   model: 'model',
   year: 'year',

@@ -16,6 +16,10 @@ function sameSelection(first: string[], second: string[]) {
   return first.length === second.length && first.every((fieldId, index) => fieldId === second[index])
 }
 
+function defaultSelection(fieldIds: string[]) {
+  return fieldIds.filter((fieldId) => fieldId !== 'print_timestamp')
+}
+
 export function useSharePreferences(userId: string, allowedFieldIds: string[]) {
   const allowedKey = allowedFieldIds.join('|')
   const currentAllowedFieldIds = allowedKey ? allowedKey.split('|') : []
@@ -39,7 +43,7 @@ export function useSharePreferences(userId: string, allowedFieldIds: string[]) {
       if (queryError) {
         setState({
           userId,
-          selectedFieldIds: allowedIdsForRequest,
+          selectedFieldIds: defaultSelection(allowedIdsForRequest),
           loaded: true,
           dirty: false,
           saveState: 'error',
@@ -51,7 +55,7 @@ export function useSharePreferences(userId: string, allowedFieldIds: string[]) {
       const saved = data?.share_field_keys
       setState({
         userId,
-        selectedFieldIds: saved ?? allowedIdsForRequest,
+        selectedFieldIds: saved ?? defaultSelection(allowedIdsForRequest),
         loaded: true,
         dirty: false,
         saveState: 'saved',
@@ -63,7 +67,7 @@ export function useSharePreferences(userId: string, allowedFieldIds: string[]) {
       if (!current) return
       setState({
         userId,
-        selectedFieldIds: allowedIdsForRequest,
+        selectedFieldIds: defaultSelection(allowedIdsForRequest),
         loaded: true,
         dirty: false,
         saveState: 'error',
@@ -121,7 +125,7 @@ export function useSharePreferences(userId: string, allowedFieldIds: string[]) {
   function updateSelection(update: (current: string[]) => string[]) {
     setState((current) => {
       const currentUserState = current?.userId === userId ? current : null
-      const selectedFieldIds = update(currentUserState?.selectedFieldIds ?? currentAllowedFieldIds)
+      const selectedFieldIds = update(currentUserState?.selectedFieldIds ?? defaultSelection(currentAllowedFieldIds))
       return {
         userId,
         selectedFieldIds,

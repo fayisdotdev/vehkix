@@ -308,7 +308,9 @@ create table if not exists public.vehicle_field_visibility (
     'last_service_date', 'last_service_km', 'next_service_date', 'next_service_km',
     'next_pucc_date', 'insurance_next_renewal_date', 'tax_valid_upto',
     'registration_validity', 'last_pucc_date', 'insurance_taken_date',
-    'rc_owner_name', 'chassis_no', 'engine_no', 'images', 'owner_username', 'id', 'uploaded_by', 'uploaded_date'
+    'rc_owner_name', 'chassis_no', 'engine_no', 'images', 'owner_username',
+    'print_timestamp', 'id', 'uploaded_by', 'uploaded_date'
+    'print_timestamp'
   ))
 );
 
@@ -335,6 +337,7 @@ values
   ('engine_no', true, true, true),
   ('images', true, true, true),
   ('owner_username', false, true, true),
+  ('print_timestamp', false, false, true),
   ('id', false, false, false),
   ('uploaded_by', false, false, false),
   ('uploaded_date', false, false, false)
