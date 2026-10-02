@@ -2,11 +2,11 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
-export default defineConfig({
-  base: '/vehkix/',
+export default defineConfig(({ command }) => ({
+  base: command === 'serve' ? '/' : '/vehkix/',
   plugins: [react()],
   build: {
     outDir: 'docs',
     emptyOutDir: true,
   },
-})
+}))
