@@ -20,6 +20,13 @@ interface VehicleShareDialogProps {
   onClose: () => void
 }
 
+function getSafeFileName(fileName: string) {
+  return Array.from(fileName)
+    .filter((character) => character.charCodeAt(0) >= 32 && !/[<>:"/\\|?*]/.test(character))
+    .join('')
+    .trim() || 'Vehicle record'
+}
+
 function VehicleShareDialog({ sections, fileName, userId, onClose }: VehicleShareDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const allFieldIds = sections.flatMap((section) => section.fields.map((field) => field.id))
@@ -102,7 +109,7 @@ function VehicleShareDialog({ sections, fileName, userId, onClose }: VehicleShar
       ? new Date().toISOString()
       : null
     setPrintDocument({
-      fileName: fileName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim() || 'Vehicle record',
+      fileName: getSafeFileName(fileName),
       vehicleName: selectedTitle && selectedFieldIds.includes(selectedTitle.id) ? selectedTitle.value : '',
       vehicleIdentifier: selectedIdentifier?.value ?? '',
       printTimestamp,
