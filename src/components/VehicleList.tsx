@@ -323,6 +323,7 @@ function VehicleList({
               {sharingVehicleId === vehicle.id && (
                 <VehicleShareDialog
                   sections={createShareSections(vehicle, showOwner, carouselImages, fieldSettings)}
+                  fileName={getVehicleName(vehicle.company, vehicle.model)}
                   userId={userId}
                   onClose={() => setSharingVehicleId(null)}
                 />

@@ -5,6 +5,7 @@ import { useSharePreferences } from '../hooks/useSharePreferences'
 import type { ShareSection } from './vehicleShare'
 
 interface PrintDocument {
+  fileName: string
   vehicleName: string
   vehicleIdentifier: string
   printTimestamp: string | null
@@ -14,11 +15,12 @@ interface PrintDocument {
 
 interface VehicleShareDialogProps {
   sections: ShareSection[]
+  fileName: string
   userId: string
   onClose: () => void
 }
 
-function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogProps) {
+function VehicleShareDialog({ sections, fileName, userId, onClose }: VehicleShareDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const allFieldIds = sections.flatMap((section) => section.fields.map((field) => field.id))
   const {
@@ -44,7 +46,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
     if (!printDocument) return
 
     const previousTitle = document.title
-    document.title = ''
+    document.title = printDocument.fileName
     document.body.classList.add('vehicle-printing', `vehicle-printing-${printDocument.orientation}`)
 
     const finishPrint = () => onClose()
@@ -100,6 +102,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
       ? new Date().toISOString()
       : null
     setPrintDocument({
+      fileName: fileName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').trim() || 'Vehicle record',
       vehicleName: selectedTitle && selectedFieldIds.includes(selectedTitle.id) ? selectedTitle.value : '',
       vehicleIdentifier: selectedIdentifier?.value ?? '',
       printTimestamp,
