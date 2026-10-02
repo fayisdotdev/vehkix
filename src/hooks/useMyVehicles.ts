@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabaseClient } from '../lib/supabase'
 import { getVehicleName, normalizeVehicle } from '../lib/vehicle'
+import type { AdminAccount } from '../types/admin'
 import type { Vehicle, VehicleDraft } from '../types/vehicle'
 
 interface VehicleImage {
@@ -12,6 +13,7 @@ interface VehicleImage {
 interface ProfileSummary {
   id: string
   username: string
+  email: string | null
 }
 
 async function signVehicleImages(paths: string[]): Promise<VehicleImage[]> {
@@ -60,6 +62,7 @@ export function useMyVehicles(session: Session | null, adminView = false) {
   const [errorState, setErrorState] = useState<{ scopeKey: string; message: string } | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [userCount, setUserCount] = useState<number | null>(null)
+  const [accounts, setAccounts] = useState<AdminAccount[]>([])
   const userId = session?.user.id
   const scopeKey = userId ? `${userId}:${adminView ? 'admin' : 'owner'}` : null
 
@@ -92,19 +95,28 @@ export function useMyVehicles(session: Session | null, adminView = false) {
 
         let profiles: ProfileSummary[] = []
         if (adminView) {
-          const profileResult = await client.from('profiles').select('id, username')
-          if (!isCurrent) return
+          const profileResult = await client.from('profiles').select('id, username, email')
           if (profileResult.error) {
-            setErrorState({ scopeKey: activeScopeKey, message: 'Could not load admin account summaries.' })
-            setLoadedFor(activeScopeKey)
-            return
+            const usernameResult = await client.from('profiles').select('id, username')
+            if (!isCurrent) return
+            if (!usernameResult.error) {
+              profiles = (usernameResult.data ?? []).map((profile) => ({ ...profile, email: null }))
+            } else {
+              setErrorState({ scopeKey: activeScopeKey, message: 'Could not load admin account summaries.' })
+              setLoadedFor(activeScopeKey)
+              return
+            }
+          } else {
+            profiles = profileResult.data ?? []
           }
-          profiles = profileResult.data ?? []
+          if (!isCurrent) return
         }
         const usernameById = new Map(profiles.map((profile) => [profile.id, profile.username]))
+        const emailById = new Map(profiles.map((profile) => [profile.id, profile.email]))
         const normalized = (vehicleResult.data ?? []).map((row) => normalizeVehicle({
           ...(row as unknown as Vehicle),
           owner_username: usernameById.get(row.user_id) ?? row.user_id,
+          owner_email: emailById.get(row.user_id) ?? null,
         }))
         const withImages = await Promise.all(normalized.map(async (vehicle) => {
           const paths = vehicle.images ?? []
@@ -118,9 +130,20 @@ export function useMyVehicles(session: Session | null, adminView = false) {
         }))
 
         if (!isCurrent) return
+        const vehicleCounts = new Map<string, number>()
+        for (const vehicle of normalized) {
+          if (!vehicle.user_id) continue
+          vehicleCounts.set(vehicle.user_id, (vehicleCounts.get(vehicle.user_id) ?? 0) + 1)
+        }
         setRecords(withImages)
         setErrorState(null)
         setUserCount(adminView ? profiles.length : null)
+        setAccounts(adminView
+          ? profiles.map((profile) => ({
+            ...profile,
+            vehicleCount: vehicleCounts.get(profile.id) ?? 0,
+          }))
+          : [])
         setLoadedFor(activeScopeKey)
       } catch {
         if (!isCurrent) return
@@ -271,6 +294,7 @@ export function useMyVehicles(session: Session | null, adminView = false) {
   const loading = Boolean(scopeKey && loadedFor !== scopeKey)
   const error = errorState && errorState.scopeKey === scopeKey ? errorState.message : null
   const vehicles = loadedFor === scopeKey ? records : []
+  const currentAccounts = adminView && loadedFor === scopeKey ? accounts : []
 
-  return { vehicles, loading, error, deleteBusy, userCount, saveVehicle, deleteVehicle }
+  return { vehicles, loading, error, deleteBusy, userCount, accounts: currentAccounts, saveVehicle, deleteVehicle }
 }

@@ -12,6 +12,7 @@ import { useMyVehicles } from './hooks/useMyVehicles'
 import { useVehicleFieldSettings } from './hooks/useVehicleFieldSettings'
 import { formatDate, getDueItems, getVehicleName, toVehicleDraft } from './lib/vehicle'
 import { vehicleFieldDefinitions } from './lib/vehicleSettings'
+import type { AdminSection } from './types/admin'
 import type { Vehicle, VehicleDraft } from './types/vehicle'
 import './styles/page.css'
 
@@ -22,6 +23,7 @@ function App() {
   const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null)
   const [showVehicleForm, setShowVehicleForm] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
+  const [adminSection, setAdminSection] = useState<AdminSection>('overview')
   const { session, isReady: authReady, error: authError, submitAuth, signOut } = useAuthSession()
   const { isAdmin, loading: adminAccessLoading, error: adminAccessError } = useAdminAccess(session)
   const {
@@ -37,6 +39,7 @@ function App() {
     error: myVehiclesError,
     deleteBusy,
     userCount,
+    accounts,
     saveVehicle,
     deleteVehicle,
   } = useMyVehicles(session, adminView)
@@ -88,12 +91,22 @@ function App() {
       ) : null,
       fieldSettings.model.show_in_details ? vehicle.model : null,
       fieldSettings.company.show_in_details ? vehicle.company : null,
+      adminView ? vehicle.owner_username : null,
+      adminView ? vehicle.owner_email : null,
     ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   )
+  const matchingOwnerIds = new Set(filteredVehicles.map((vehicle) => vehicle.user_id).filter(Boolean))
+  const searchTerm = query.trim().toLowerCase()
+  const filteredAccounts = accounts.filter((account) => (
+    !searchTerm
+    || account.username.toLowerCase().includes(searchTerm)
+    || account.email?.toLowerCase().includes(searchTerm)
+    || matchingOwnerIds.has(account.id)
+  ))
   const dueVehicles = vehicleRecords
     .map((vehicle) => ({
       vehicle,
@@ -125,7 +138,11 @@ function App() {
                   className="text-action admin-view-toggle"
                   type="button"
                   aria-pressed={adminView}
-                  onClick={() => { setActiveView(adminView ? 'collection' : 'admin'); setQuery('') }}
+                  onClick={() => {
+                    setActiveView(adminView ? 'collection' : 'admin')
+                    setAdminSection('overview')
+                    setQuery('')
+                  }}
                 >
                   {adminView ? 'My collection' : 'Admin panel'}
                 </button>
@@ -141,7 +158,9 @@ function App() {
           <div>
             <h1 id="page-title">
               {session
-                ? adminView ? 'Admin panel' : 'My vehicles'
+                ? adminView
+                  ? adminSection === 'vehicles' ? 'Vehicles' : adminSection === 'users' ? 'Users' : adminSection === 'overview' ? 'Admin panel' : 'Field visibility'
+                  : 'My vehicles'
                 : <img className="brand-wordmark" src={brandWordmark} alt="Vehkix" />}
             </h1>
           </div>
@@ -237,7 +256,47 @@ function App() {
             settingsLoading={fieldSettingsLoading}
             settingsError={fieldSettingsError}
             onUpdateFieldSetting={updateFieldSetting}
-          />
+            activeSection={adminSection}
+            accounts={accounts}
+            accountsLoading={myVehiclesLoading}
+            accountsError={myVehiclesError}
+            onSelectSection={(section) => { setAdminSection(section); setQuery('') }}
+          >
+            {adminSection === 'vehicles' && (
+              <>
+                <label className="search-box">
+                  <span className="search-icon" aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search username, email, or vehicles"
+                    aria-label="Search users and vehicles"
+                  />
+                  <span className="result-count">{filteredVehicles.length} shown</span>
+                </label>
+                {myVehiclesLoading && <p className="empty-state" role="status">Loading user vehicles…</p>}
+                {myVehiclesError && <p className="empty-state error-state" role="alert">{myVehiclesError}</p>}
+                {!myVehiclesLoading && !myVehiclesError && (
+                  <VehicleList
+                    vehicles={filteredVehicles}
+                    ownerAccounts={filteredAccounts.filter((account) => account.vehicleCount > 0)}
+                    query={query}
+                    expandedVehicleId={expandedVehicleId}
+                    deleteBusy={deleteBusy}
+                    showOwner
+                    userId={session.user.id}
+                    fieldSettings={fieldSettings}
+                    onToggleExpanded={(vehicleId) => setExpandedVehicleId(
+                      expandedVehicleId === vehicleId ? null : vehicleId,
+                    )}
+                    onEdit={(vehicle) => { setEditingVehicle(vehicle); setShowVehicleForm(true) }}
+                    onDelete={(vehicle) => { void handleDeleteVehicle(vehicle) }}
+                  />
+                )}
+              </>
+            )}
+          </AdminPanel>
         )}
 
         {session && !adminView && (
@@ -267,7 +326,7 @@ function App() {
           />
         )}
 
-        {session && (
+        {session && !adminView && (
           <label className="search-box">
             <span className="search-icon" aria-hidden="true" />
             <input
@@ -281,22 +340,22 @@ function App() {
           </label>
         )}
 
-        {session && myVehiclesLoading && (
+        {session && !adminView && myVehiclesLoading && (
           <p className="empty-state" role="status">Loading your collection…</p>
         )}
-        {(authError || (session && myVehiclesError) || (session && adminAccessError) || actionError) && (
+        {(authError || (session && !adminView && myVehiclesError) || (session && adminAccessError) || actionError) && (
           <p className="empty-state error-state" role="alert">
             {authError || myVehiclesError || adminAccessError || actionError}
           </p>
         )}
 
-        {session && !myVehiclesLoading && !myVehiclesError && (
+        {session && !adminView && !myVehiclesLoading && !myVehiclesError && (
           <VehicleList
             vehicles={filteredVehicles}
             query={query}
             expandedVehicleId={expandedVehicleId}
             deleteBusy={deleteBusy}
-            showOwner={adminView}
+            showOwner={false}
             userId={session.user.id}
             fieldSettings={fieldSettings}
             onToggleExpanded={(vehicleId) => setExpandedVehicleId(

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { displayValue, formatDate, formatMileage, getDueMessage, getUpcomingDocuments, getVehicleName, getVehicleStatus } from '../lib/vehicle'
 import type { ExistingVehicleImage, Vehicle } from '../types/vehicle'
 import type { VehicleFieldKey, VehicleFieldSettings } from '../lib/vehicleSettings'
+import type { AdminAccount } from '../types/admin'
 import VehicleShareDialog from './VehicleShareDialog'
 import { createShareSections } from './vehicleShare'
 import './VehicleList.css'
@@ -12,11 +13,42 @@ interface VehicleListProps {
   expandedVehicleId: string | null
   deleteBusy: boolean
   showOwner?: boolean
+  ownerAccounts?: AdminAccount[]
   userId: string
   fieldSettings: VehicleFieldSettings
   onToggleExpanded: (vehicleId: string) => void
   onEdit: (vehicle: Vehicle) => void
   onDelete: (vehicle: Vehicle) => void
+}
+
+interface VehicleOwnerGroup {
+  key: string
+  username: string
+  email: string | null
+  vehicles: Vehicle[]
+}
+
+function groupVehiclesByOwner(vehicles: Vehicle[], accounts: AdminAccount[]): VehicleOwnerGroup[] {
+  const groups = new Map<string, VehicleOwnerGroup>(accounts.map((account) => [account.id, {
+    key: account.id,
+    username: account.username,
+    email: account.email,
+    vehicles: [],
+  }]))
+
+  for (const vehicle of vehicles) {
+    const key = vehicle.user_id ?? vehicle.owner_username ?? 'unknown-user'
+    const group = groups.get(key) ?? {
+      key,
+      username: vehicle.owner_username || 'Unknown user',
+      email: vehicle.owner_email ?? null,
+      vehicles: [],
+    }
+    group.vehicles.push(vehicle)
+    groups.set(key, group)
+  }
+
+  return [...groups.values()]
 }
 
 function VehicleList({
@@ -25,6 +57,7 @@ function VehicleList({
   expandedVehicleId,
   deleteBusy,
   showOwner = false,
+  ownerAccounts = [],
   userId,
   fieldSettings,
   onToggleExpanded,
@@ -38,20 +71,50 @@ function VehicleList({
       .filter((setting) => setting.show_in_details)
       .map((setting) => setting.field_key),
   )
+  const ownerGroups: VehicleOwnerGroup[] = showOwner
+    ? groupVehiclesByOwner(vehicles, ownerAccounts)
+    : [{ key: 'collection', username: '', email: null, vehicles }]
 
-  if (vehicles.length === 0) {
+  if (vehicles.length === 0 && (!showOwner || ownerGroups.length === 0)) {
     return (
       <p className="empty-state">
         {query.trim()
           ? <>No vehicles match “{query}”.</>
-          : 'Your private collection is empty.'}
+          : showOwner
+            ? 'No vehicles have been added to any user account.'
+            : 'Your private collection is empty.'}
       </p>
     )
   }
 
   return (
-    <div className="vehicle-list" role="list" aria-label="My vehicles">
-      {vehicles.map((vehicle) => {
+    <div className="vehicle-list" aria-label={showOwner ? 'All user vehicles' : 'My vehicles'}>
+      {ownerGroups.map((group) => (
+        <section
+          className={showOwner ? 'vehicle-owner-group' : undefined}
+          key={group.key}
+          aria-labelledby={showOwner ? `vehicle-owner-${group.key}` : undefined}
+        >
+          {showOwner && (
+            <header className="vehicle-owner-heading">
+              <div>
+                <h2 id={`vehicle-owner-${group.key}`}>{group.username}</h2>
+                <p>{group.email || 'Email unavailable'}</p>
+              </div>
+              <span>{group.vehicles.length} {group.vehicles.length === 1 ? 'vehicle' : 'vehicles'}</span>
+            </header>
+          )}
+          <div className="vehicle-owner-list" role="list" aria-label={showOwner ? `${group.username} vehicles` : 'My vehicles'}>
+            {group.vehicles.length > 0
+              ? group.vehicles.map((vehicle) => renderVehicle(vehicle))
+              : <p className="vehicle-owner-empty">No vehicles listed for this account.</p>}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+
+  function renderVehicle(vehicle: Vehicle) {
         const vehicleName = getVehicleName(
           fieldSettings.company.show_in_details ? vehicle.company : null,
           fieldSettings.model.show_in_details ? vehicle.model : null,
@@ -266,9 +329,7 @@ function VehicleList({
               )}
           </article>
         )
-      })}
-    </div>
-  )
+  }
 }
 
 export default VehicleList

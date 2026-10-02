@@ -27,6 +27,7 @@ export interface Vehicle {
   }
   user_id?: string
   owner_username?: string
+  owner_email?: string | null
   last_service_date?: string | null
   last_service_km?: number | null
   next_service_date?: string | null

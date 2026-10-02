@@ -1,9 +1,18 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   username text not null,
+  email text,
   created_at timestamptz not null default now(),
   constraint profiles_username_format check (username ~ '^[A-Za-z0-9_]{3,32}$')
 );
+
+alter table public.profiles add column if not exists email text;
+
+update public.profiles as profile
+set email = auth_user.email
+from auth.users as auth_user
+where profile.id = auth_user.id
+  and profile.email is distinct from auth_user.email;
 
 create unique index if not exists profiles_username_unique_ci
   on public.profiles (lower(username));
@@ -66,8 +75,8 @@ begin
     raise exception 'Username must contain 3 to 32 letters, numbers, or underscores';
   end if;
 
-  insert into public.profiles (id, username)
-  values (new.id, requested_username);
+  insert into public.profiles (id, username, email)
+  values (new.id, requested_username, new.email);
 
   return new;
 end;
@@ -77,6 +86,25 @@ drop trigger if exists on_auth_user_created_profile on auth.users;
 create trigger on_auth_user_created_profile
   after insert on auth.users
   for each row execute function public.create_profile_for_new_user();
+
+create or replace function public.sync_profile_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.profiles
+  set email = new.email
+  where id = new.id;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_email_updated on auth.users;
+create trigger on_auth_user_email_updated
+  after update of email on auth.users
+  for each row execute function public.sync_profile_email();
 
 create table if not exists public.user_vehicles (
   id uuid primary key default gen_random_uuid(),
