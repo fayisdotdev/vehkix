@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import brandWordmark from '../../images/logo/vehkix-wordmark-color-transparent.png'
 import { useSharePreferences } from '../hooks/useSharePreferences'
 import type { ShareSection } from './vehicleShare'
@@ -6,6 +7,7 @@ import type { ShareSection } from './vehicleShare'
 interface PrintDocument {
   vehicleName: string
   vehicleIdentifier: string
+  orientation: 'portrait' | 'landscape'
   sections: ShareSection[]
 }
 
@@ -28,6 +30,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
     useSharePreferences(userId, allFieldIds)
   const [printDocument, setPrintDocument] = useState<PrintDocument | null>(null)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait')
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -41,7 +44,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
 
     const previousTitle = document.title
     document.title = printDocument.vehicleName || printDocument.vehicleIdentifier || 'Vehicle record'
-    document.body.classList.add('vehicle-printing')
+    document.body.classList.add('vehicle-printing', `vehicle-printing-${printDocument.orientation}`)
 
     const finishPrint = () => onClose()
     window.addEventListener('afterprint', finishPrint, { once: true })
@@ -79,6 +82,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
     return () => {
       window.removeEventListener('afterprint', finishPrint)
       document.body.classList.remove('vehicle-printing')
+      document.body.classList.remove(`vehicle-printing-${printDocument.orientation}`)
       document.title = previousTitle
     }
   }, [onClose, printDocument])
@@ -94,6 +98,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
     setPrintDocument({
       vehicleName: selectedTitle && selectedFieldIds.includes(selectedTitle.id) ? selectedTitle.value : '',
       vehicleIdentifier: selectedIdentifier?.value ?? '',
+      orientation,
       sections: sections
         .map((section) => ({
           ...section,
@@ -140,6 +145,21 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
                   : 'Choices saved'}
             </span>
           </div>
+          <fieldset className="vehicle-share-orientation" aria-label="Print page layout">
+            <legend>Page layout</legend>
+            {(['portrait', 'landscape'] as const).map((layout) => (
+              <label key={layout}>
+                <input
+                  type="radio"
+                  name="vehicle-print-orientation"
+                  value={layout}
+                  checked={orientation === layout}
+                  onChange={() => setOrientation(layout)}
+                />
+                <span>{layout === 'portrait' ? 'Portrait' : 'Landscape'}</span>
+              </label>
+            ))}
+          </fieldset>
           {preferencesError && <p className="vehicle-share-preferences-error" role="alert">{preferencesError}</p>}
           <div className="vehicle-share-sections">
             {sections.map((section) => (
@@ -202,6 +222,7 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
         )}
       </dialog>
       {printDocument && (
+        createPortal(
         <article className="vehicle-print-sheet" aria-hidden="true">
           <header>
             <div className="vehicle-print-logo">
@@ -229,6 +250,8 @@ function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogPro
             </section>
           ))}
         </article>
+        , document.body,
+        )
       )}
     </>
   )

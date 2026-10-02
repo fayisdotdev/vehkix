@@ -76,7 +76,9 @@ begin
   end if;
 
   insert into public.profiles (id, username, email)
-  values (new.id, requested_username, new.email);
+  values (new.id, requested_username, new.email)
+  on conflict (id) do update
+    set email = excluded.email;
 
   return new;
 end;
