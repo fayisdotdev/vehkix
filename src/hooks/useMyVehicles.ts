@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabaseClient } from '../lib/supabase'
-import { normalizeVehicle } from '../lib/vehicle'
+import { getVehicleName, normalizeVehicle } from '../lib/vehicle'
 import type { Vehicle, VehicleDraft } from '../types/vehicle'
 
 interface VehicleImage {
@@ -32,7 +32,7 @@ function toDatabasePayload(draft: VehicleDraft, username: string | null) {
 
   return {
     vehicle_number: nullableText(draft.vehicle_number),
-    name: nullableText(draft.name),
+    name: nullableText(getVehicleName(draft.company, draft.model)),
     model: nullableText(draft.model),
     company: nullableText(draft.company),
     year: nullableNumber(draft.year),

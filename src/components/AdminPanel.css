@@ -76,6 +76,145 @@
   color: var(--green);
 }
 
+.admin-field-settings {
+  margin: 32px 0;
+  border-top: 1px solid var(--line);
+}
+
+.admin-field-settings-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0 18px;
+}
+
+.admin-field-settings-heading .eyebrow {
+  margin: 0 0 7px;
+}
+
+.admin-field-settings-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 21px;
+}
+
+.admin-field-settings-heading > p {
+  max-width: 390px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.admin-field-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 36px;
+}
+
+.admin-field-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-field-tab {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.admin-field-tab[aria-selected='true'] {
+  border-bottom-color: var(--green);
+  color: var(--green);
+}
+
+.admin-field-tab:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+
+.admin-field-panel-description {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.admin-field-group h3 {
+  margin: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 13px;
+}
+
+.admin-field-row {
+  display: grid;
+  min-height: 42px;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-field-header {
+  min-height: 34px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.admin-field-header > span:last-child {
+  text-align: center;
+}
+
+.admin-field-name {
+  min-width: 0;
+  padding: 6px 8px 6px 0;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.admin-field-toggle {
+  display: grid;
+  min-height: 40px;
+  place-items: center;
+  cursor: pointer;
+}
+
+.admin-field-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--green);
+}
+
+.admin-field-toggle input:disabled {
+  cursor: progress;
+}
+
+.admin-field-unavailable {
+  color: var(--muted);
+}
+
+.admin-settings-message {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.admin-field-settings .error-state {
+  color: #a3342e;
+}
+
 @media (max-width: 600px) {
   .admin-dashboard-heading {
     align-items: flex-start;
@@ -101,5 +240,25 @@
 
   .admin-metric:last-child {
     border-bottom: 0;
+  }
+
+  .admin-field-settings-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .admin-field-groups {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .admin-field-row {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
+
+  .admin-field-tab {
+    flex: 1 1 0;
+    padding-inline: 6px;
   }
 }

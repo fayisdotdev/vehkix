@@ -1,4 +1,5 @@
 import type { Vehicle, VehicleDraft } from '../types/vehicle'
+import type { VehicleFieldKey } from './vehicleSettings'
 
 const dateFormatter = new Intl.DateTimeFormat('en', {
   day: 'numeric',
@@ -7,7 +8,7 @@ const dateFormatter = new Intl.DateTimeFormat('en', {
 })
 
 interface UpcomingDocument {
-  id: string
+  id: VehicleFieldKey
   summaryLabel: string
   label: string
   date?: string | null
@@ -53,15 +54,19 @@ export function daysUntil(value?: string | null) {
   return Math.ceil((date.getTime() - today.getTime()) / 86400000)
 }
 
-export function getDueItems(vehicle: Vehicle) {
-  return [
-    { label: 'Service', date: vehicle.service?.next_service_date },
-    { label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
-    { label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
-    { label: 'Tax', date: vehicle.tax_valid_upto },
-    { label: 'Registration', date: vehicle.registration_validity },
+export function getDueItems(vehicle: Vehicle, visibleFields?: Set<VehicleFieldKey>) {
+  const items: { field: VehicleFieldKey; label: string; date?: string | null }[] = [
+    { field: 'next_service_date', label: 'Service', date: vehicle.service?.next_service_date },
+    { field: 'next_pucc_date', label: 'PUCC', date: vehicle.pucc?.next_pucc_date },
+    { field: 'insurance_next_renewal_date', label: 'Insurance', date: vehicle.insurance?.next_renewal_date },
+    { field: 'tax_valid_upto', label: 'Tax', date: vehicle.tax_valid_upto },
+    { field: 'registration_validity', label: 'Registration', date: vehicle.registration_validity },
   ]
-    .filter((item): item is { label: string; date: string } => Boolean(item.date))
+
+  return items
+    .filter((item): item is { field: VehicleFieldKey; label: string; date: string } => (
+      Boolean(item.date) && (!visibleFields || visibleFields.has(item.field))
+    ))
     .map((item) => ({ ...item, days: daysUntil(item.date) }))
     .sort((first, second) => first.days - second.days)
 }
@@ -69,25 +74,25 @@ export function getDueItems(vehicle: Vehicle) {
 export function getUpcomingDocuments(vehicle: Vehicle) {
   return [
     {
-      id: 'insurance-renewal',
+      id: 'insurance_next_renewal_date',
       summaryLabel: 'Insurance renewal',
       label: 'Insurance renewal',
       date: vehicle.insurance?.next_renewal_date,
     },
     {
-      id: 'next-pucc',
+      id: 'next_pucc_date',
       summaryLabel: 'PUCC renewal',
       label: 'Next PUCC renewal',
       date: vehicle.pucc?.next_pucc_date,
     },
     {
-      id: 'tax-validity',
+      id: 'tax_valid_upto',
       summaryLabel: 'Tax validity',
       label: 'Tax valid up to',
       date: vehicle.tax_valid_upto,
     },
     {
-      id: 'registration-validity',
+      id: 'registration_validity',
       summaryLabel: 'Registration validity',
       label: 'Registration valid up to',
       date: vehicle.registration_validity,
@@ -97,12 +102,12 @@ export function getUpcomingDocuments(vehicle: Vehicle) {
     .sort((first, second) => first.date.localeCompare(second.date))
 }
 
-export function getNextDue(vehicle: Vehicle) {
-  return getDueItems(vehicle)[0] ?? null
+export function getNextDue(vehicle: Vehicle, visibleFields?: Set<VehicleFieldKey>) {
+  return getDueItems(vehicle, visibleFields)[0] ?? null
 }
 
-export function getVehicleStatus(vehicle: Vehicle) {
-  const nearestDue = getNextDue(vehicle)
+export function getVehicleStatus(vehicle: Vehicle, visibleFields?: Set<VehicleFieldKey>) {
+  const nearestDue = getNextDue(vehicle, visibleFields)
 
   if (!nearestDue) return { label: 'No due date', className: 'no-date' }
   if (nearestDue.days < 0) return { label: 'Overdue', className: 'overdue' }
@@ -110,8 +115,8 @@ export function getVehicleStatus(vehicle: Vehicle) {
   return { label: 'On track', className: 'on-track' }
 }
 
-export function getDueMessage(vehicle: Vehicle) {
-  const nextDue = getNextDue(vehicle)
+export function getDueMessage(vehicle: Vehicle, visibleFields?: Set<VehicleFieldKey>) {
+  const nextDue = getNextDue(vehicle, visibleFields)
   if (!nextDue || nextDue.days > 10) return null
   if (nextDue.days < 0) return `${nextDue.label} overdue by ${Math.abs(nextDue.days)} days`
   if (nextDue.days === 0) return `${nextDue.label} due today`
@@ -123,6 +128,10 @@ export function displayValue(value?: string | number | null) {
   return value === undefined || value === null || value === '' ? 'Not set' : value
 }
 
+export function getVehicleName(company?: string | null, model?: string | null) {
+  return [company, model].filter(Boolean).join(' ') || 'Unnamed vehicle'
+}
+
 export function formatMileage(value?: number | null) {
   return value == null ? 'Not set' : `${value.toLocaleString()} km`
 }
@@ -130,7 +139,7 @@ export function formatMileage(value?: number | null) {
 export function toVehicleDraft(vehicle: Vehicle): VehicleDraft {
   return {
     vehicle_number: vehicle.vehicle_number ?? '',
-    name: vehicle.name ?? '',
+    name: getVehicleName(vehicle.company, vehicle.model),
     model: vehicle.model ?? '',
     company: vehicle.company ?? '',
     year: vehicle.year == null ? '' : String(vehicle.year),

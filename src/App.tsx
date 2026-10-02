@@ -9,7 +9,9 @@ import VehicleList from './components/VehicleList'
 import { useAdminAccess } from './hooks/useAdminAccess'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useMyVehicles } from './hooks/useMyVehicles'
-import { formatDate, getDueItems, toVehicleDraft } from './lib/vehicle'
+import { useVehicleFieldSettings } from './hooks/useVehicleFieldSettings'
+import { formatDate, getDueItems, getVehicleName, toVehicleDraft } from './lib/vehicle'
+import { vehicleFieldDefinitions } from './lib/vehicleSettings'
 import type { Vehicle, VehicleDraft } from './types/vehicle'
 import './styles/page.css'
 
@@ -22,6 +24,12 @@ function App() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null)
   const { session, isReady: authReady, error: authError, submitAuth, signOut } = useAuthSession()
   const { isAdmin, loading: adminAccessLoading, error: adminAccessError } = useAdminAccess(session)
+  const {
+    settings: fieldSettings,
+    loading: fieldSettingsLoading,
+    error: fieldSettingsError,
+    updateSetting: updateFieldSetting,
+  } = useVehicleFieldSettings(session?.user.id, isAdmin)
   const adminView = activeView === 'admin' && isAdmin
   const {
     vehicles: vehicleRecords,
@@ -65,8 +73,22 @@ function App() {
     setActiveView('collection')
   }
 
+  const visibleDetailFields = new Set(
+    vehicleFieldDefinitions
+      .filter((field) => fieldSettings[field.key].show_in_details)
+      .map((field) => field.key),
+  )
   const filteredVehicles = vehicleRecords.filter((vehicle) =>
-    [vehicle.id, vehicle.vehicle_number, vehicle.name, vehicle.model, vehicle.company]
+    [
+      fieldSettings.id.show_in_details ? vehicle.id : null,
+      fieldSettings.vehicle_number.show_in_details ? vehicle.vehicle_number : null,
+      fieldSettings.vehicle_title.show_in_details ? getVehicleName(
+        fieldSettings.company.show_in_details ? vehicle.company : null,
+        fieldSettings.model.show_in_details ? vehicle.model : null,
+      ) : null,
+      fieldSettings.model.show_in_details ? vehicle.model : null,
+      fieldSettings.company.show_in_details ? vehicle.company : null,
+    ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
@@ -75,7 +97,7 @@ function App() {
   const dueVehicles = vehicleRecords
     .map((vehicle) => ({
       vehicle,
-      items: getDueItems(vehicle).filter((item) => item.days <= 10),
+      items: getDueItems(vehicle, visibleDetailFields).filter((item) => item.days <= 10),
     }))
     .filter(({ items }) => items.length > 0)
   const attentionCount = dueVehicles.length
@@ -155,8 +177,18 @@ function App() {
                 {dueVehicles.map(({ vehicle, items }) => (
                   <li className="due-vehicle" key={vehicle.id}>
                     <div className="due-vehicle-heading">
-                      <strong>{vehicle.name || 'Unnamed vehicle'}</strong>
-                      <span>{vehicle.vehicle_number || vehicle.id}</span>
+                      {fieldSettings.vehicle_title.show_in_details && (
+                        <strong>{getVehicleName(
+                          fieldSettings.company.show_in_details ? vehicle.company : null,
+                          fieldSettings.model.show_in_details ? vehicle.model : null,
+                        )}</strong>
+                      )}
+                      {fieldSettings.vehicle_number.show_in_details && (
+                        <span>{vehicle.vehicle_number || 'Not set'}</span>
+                      )}
+                      {!fieldSettings.vehicle_number.show_in_details && fieldSettings.id.show_in_details && (
+                        <span>{vehicle.id}</span>
+                      )}
                     </div>
                     <ul className="due-item-list">
                       {items.map(({ label, date, days }) => (
@@ -201,6 +233,10 @@ function App() {
             userCount={userCount}
             vehicleCount={vehicleRecords.length}
             dueCount={attentionCount}
+            fieldSettings={fieldSettings}
+            settingsLoading={fieldSettingsLoading}
+            settingsError={fieldSettingsError}
+            onUpdateFieldSetting={updateFieldSetting}
           />
         )}
 
@@ -223,6 +259,7 @@ function App() {
           <VehicleForm
             key={editingVehicle?.id ?? 'new-vehicle'}
             initialDraft={editingVehicle ? toVehicleDraft(editingVehicle) : undefined}
+            fieldSettings={fieldSettings}
             existingImages={editingVehicle?.signed_images ?? []}
             initialPrimaryImagePath={editingVehicle?.primary_image}
             onSave={handleVehicleSave}
@@ -260,6 +297,8 @@ function App() {
             expandedVehicleId={expandedVehicleId}
             deleteBusy={deleteBusy}
             showOwner={adminView}
+            userId={session.user.id}
+            fieldSettings={fieldSettings}
             onToggleExpanded={(vehicleId) => setExpandedVehicleId(
               expandedVehicleId === vehicleId ? null : vehicleId,
             )}

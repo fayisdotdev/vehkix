@@ -1,5 +1,6 @@
-import { displayValue, formatDate, formatMileage, getUpcomingDocuments } from '../lib/vehicle'
+import { displayValue, formatDate, formatMileage, getUpcomingDocuments, getVehicleName } from '../lib/vehicle'
 import type { Vehicle } from '../types/vehicle'
+import { type VehicleFieldKey, type VehicleFieldSettings } from '../lib/vehicleSettings'
 
 interface ShareField {
   id: string
@@ -13,7 +14,12 @@ export interface ShareSection {
   fields: ShareField[]
 }
 
-export function createShareSections(vehicle: Vehicle, showOwner: boolean, images: { url: string }[]): ShareSection[] {
+export function createShareSections(
+  vehicle: Vehicle,
+  showOwner: boolean,
+  images: { url: string }[],
+  settings: VehicleFieldSettings,
+): ShareSection[] {
   const vehicleFields: ShareField[] = [
     { id: 'vehicle-number', label: 'Vehicle number', value: String(displayValue(vehicle.vehicle_number)) },
     { id: 'make', label: 'Make', value: String(displayValue(vehicle.company)) },
@@ -33,7 +39,17 @@ export function createShareSections(vehicle: Vehicle, showOwner: boolean, images
   return [
     {
       title: 'Vehicle',
-      fields: vehicleFields,
+      fields: [
+          {
+            id: 'vehicle-title',
+            label: 'Vehicle title',
+            value: getVehicleName(
+              settings.company.allow_share ? vehicle.company : null,
+              settings.model.allow_share ? vehicle.model : null,
+            ),
+          },
+        ...vehicleFields,
+      ],
     },
     {
       title: 'Service',
@@ -86,7 +102,40 @@ export function createShareSections(vehicle: Vehicle, showOwner: boolean, images
   ]
     .map((section) => ({
       ...section,
-      fields: section.fields.filter((field) => field.value !== 'Not set'),
+      fields: section.fields.filter((field) => (
+        field.value !== 'Not set'
+        && settings[shareSettingKey(field.id)].allow_share
+      )),
     }))
     .filter((section) => section.fields.length > 0)
+}
+
+const shareSettingKeys: Record<string, VehicleFieldKey> = {
+  'vehicle-title': 'vehicle_title',
+  'vehicle-number': 'vehicle_number',
+  'record-id': 'id',
+  owner: 'owner_username',
+  make: 'company',
+  model: 'model',
+  year: 'year',
+  'taken-date': 'taken_date',
+  'last-service-date': 'last_service_date',
+  'last-service-mileage': 'last_service_km',
+  'next-service-date': 'next_service_date',
+  'next-service-mileage': 'next_service_km',
+  next_pucc_date: 'next_pucc_date',
+  insurance_next_renewal_date: 'insurance_next_renewal_date',
+  tax_valid_upto: 'tax_valid_upto',
+  registration_validity: 'registration_validity',
+  'last-pucc': 'last_pucc_date',
+  'policy-date': 'insurance_taken_date',
+  'rc-owner': 'rc_owner_name',
+  'chassis-number': 'chassis_no',
+  'engine-number': 'engine_no',
+  'uploaded-by': 'uploaded_by',
+  'uploaded-on': 'uploaded_date',
+}
+
+function shareSettingKey(fieldId: string): VehicleFieldKey {
+  return fieldId.startsWith('photo-') ? 'images' : shareSettingKeys[fieldId]
 }

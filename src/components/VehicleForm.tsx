@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent } from 'react'
 import type { ExistingVehicleImage, VehicleDraft } from '../types/vehicle'
+import type { VehicleFieldKey, VehicleFieldSettings } from '../lib/vehicleSettings'
 import '../styles/forms.css'
 import './VehicleForm.css'
 
 interface VehicleFormProps {
   initialDraft?: VehicleDraft
+  fieldSettings: VehicleFieldSettings
   existingImages?: ExistingVehicleImage[]
   initialPrimaryImagePath?: string | null
   onSave: (
@@ -46,6 +48,7 @@ const emptyDraft: VehicleDraft = {
 
 function VehicleForm({
   initialDraft,
+  fieldSettings,
   existingImages = [],
   initialPrimaryImagePath,
   onSave,
@@ -190,6 +193,7 @@ function VehicleForm({
   ]
 
   function field(label: string, name: keyof VehicleDraft, type = 'text') {
+    if (name === 'name' || !fieldSettings[name as VehicleFieldKey]?.show_in_form) return null
     return (
       <label className="form-field" key={name}>
         <span>{label}</span>
@@ -202,6 +206,10 @@ function VehicleForm({
         />
       </label>
     )
+  }
+
+  function hasVisibleFormField(fields: VehicleFieldKey[]) {
+    return fields.some((name) => fieldSettings[name].show_in_form)
   }
 
   return (
@@ -226,19 +234,18 @@ function VehicleForm({
         </button>
       </div>
 
-      <fieldset className="vehicle-fieldset">
+      {hasVisibleFormField(['vehicle_number', 'company', 'model', 'year', 'taken_date']) && <fieldset className="vehicle-fieldset">
         <legend>Vehicle information</legend>
         <div className="form-grid">
           {field('Registration number', 'vehicle_number')}
-          {field('Vehicle name', 'name')}
           {field('Make', 'company')}
           {field('Model', 'model')}
           {field('Year', 'year', 'number')}
           {field('Date acquired', 'taken_date', 'date')}
         </div>
-      </fieldset>
+      </fieldset>}
 
-      <fieldset className="vehicle-fieldset">
+      {hasVisibleFormField(['last_service_date', 'last_service_km', 'next_service_date', 'next_service_km']) && <fieldset className="vehicle-fieldset">
         <legend>Service</legend>
         <div className="form-grid">
           {field('Last service date', 'last_service_date', 'date')}
@@ -246,9 +253,9 @@ function VehicleForm({
           {field('Next service date', 'next_service_date', 'date')}
           {field('Next service mileage (km)', 'next_service_km', 'number')}
         </div>
-      </fieldset>
+      </fieldset>}
 
-      <fieldset className="vehicle-fieldset">
+      {hasVisibleFormField(['last_pucc_date', 'next_pucc_date', 'insurance_taken_date', 'insurance_next_renewal_date']) && <fieldset className="vehicle-fieldset">
         <legend>Documents</legend>
         <div className="form-grid">
           {field('Last PUCC date', 'last_pucc_date', 'date')}
@@ -256,9 +263,9 @@ function VehicleForm({
           {field('Insurance policy date', 'insurance_taken_date', 'date')}
           {field('Insurance renewal', 'insurance_next_renewal_date', 'date')}
         </div>
-      </fieldset>
+      </fieldset>}
 
-      <fieldset className="vehicle-fieldset">
+      {hasVisibleFormField(['rc_owner_name', 'chassis_no', 'engine_no', 'tax_valid_upto', 'registration_validity']) && <fieldset className="vehicle-fieldset">
         <legend>RC details</legend>
         <div className="form-grid">
           {field('RC owner name', 'rc_owner_name')}
@@ -267,9 +274,9 @@ function VehicleForm({
           {field('Tax valid up to', 'tax_valid_upto', 'date')}
           {field('Registration valid up to', 'registration_validity', 'date')}
         </div>
-      </fieldset>
+      </fieldset>}
 
-      <div className="form-field image-upload-field">
+      {fieldSettings.images.show_in_form && <div className="form-field image-upload-field">
         <span>Vehicle images</span>
         <div className="file-picker">
           <label className="file-picker-button" htmlFor="vehicle-images">Choose images</label>
@@ -316,7 +323,7 @@ function VehicleForm({
             ))}
           </ul>
         )}
-      </div>
+      </div>}
 
       {error && <p className="form-feedback error" role="alert">{error}</p>}
       <div className="form-actions">

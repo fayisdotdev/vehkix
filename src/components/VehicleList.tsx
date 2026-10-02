@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { displayValue, formatDate, formatMileage, getDueMessage, getUpcomingDocuments, getVehicleStatus } from '../lib/vehicle'
+import { useState, type ReactNode } from 'react'
+import { displayValue, formatDate, formatMileage, getDueMessage, getUpcomingDocuments, getVehicleName, getVehicleStatus } from '../lib/vehicle'
 import type { ExistingVehicleImage, Vehicle } from '../types/vehicle'
+import type { VehicleFieldKey, VehicleFieldSettings } from '../lib/vehicleSettings'
 import VehicleShareDialog from './VehicleShareDialog'
 import { createShareSections } from './vehicleShare'
 import './VehicleList.css'
@@ -11,6 +12,8 @@ interface VehicleListProps {
   expandedVehicleId: string | null
   deleteBusy: boolean
   showOwner?: boolean
+  userId: string
+  fieldSettings: VehicleFieldSettings
   onToggleExpanded: (vehicleId: string) => void
   onEdit: (vehicle: Vehicle) => void
   onDelete: (vehicle: Vehicle) => void
@@ -22,12 +25,19 @@ function VehicleList({
   expandedVehicleId,
   deleteBusy,
   showOwner = false,
+  userId,
+  fieldSettings,
   onToggleExpanded,
   onEdit,
   onDelete,
 }: VehicleListProps) {
   const [imageIndices, setImageIndices] = useState<Record<string, number>>({})
   const [sharingVehicleId, setSharingVehicleId] = useState<string | null>(null)
+  const visibleDetailFields = new Set(
+    Object.values(fieldSettings)
+      .filter((setting) => setting.show_in_details)
+      .map((setting) => setting.field_key),
+  )
 
   if (vehicles.length === 0) {
     return (
@@ -42,10 +52,15 @@ function VehicleList({
   return (
     <div className="vehicle-list" role="list" aria-label="My vehicles">
       {vehicles.map((vehicle) => {
-        const vehicleName = vehicle.name || 'Unnamed vehicle'
-        const status = getVehicleStatus(vehicle)
-        const dueMessage = getDueMessage(vehicle)
-        const [nextDocument] = getUpcomingDocuments(vehicle)
+        const vehicleName = getVehicleName(
+          fieldSettings.company.show_in_details ? vehicle.company : null,
+          fieldSettings.model.show_in_details ? vehicle.model : null,
+        )
+        const status = getVehicleStatus(vehicle, visibleDetailFields)
+        const dueMessage = getDueMessage(vehicle, visibleDetailFields)
+        const visibleDocuments = getUpcomingDocuments(vehicle)
+          .filter((document) => fieldSettings[document.id].show_in_details)
+        const [nextDocument] = visibleDocuments
         const images = vehicle.images ?? []
         const carouselImages = vehicle.signed_images?.filter(
           (image): image is ExistingVehicleImage & { url: string } => Boolean(image.url),
@@ -64,11 +79,14 @@ function VehicleList({
         )
         const isExpanded = expandedVehicleId === vehicle.id
         const detailsId = `details-${vehicle.id}`
+        const detailField = (key: VehicleFieldKey, label: string, value: ReactNode) => (
+          fieldSettings[key].show_in_details && <div key={key}><dt>{label}</dt><dd>{value}</dd></div>
+        )
 
         return (
           <article className="vehicle-row" key={vehicle.id} role="listitem">
             <div className="vehicle-cover">
-              {carouselImages.length > 0 ? (
+              {fieldSettings.images.show_in_details && carouselImages.length > 0 ? (
                 <>
                   <img src={carouselImages[activeImageIndex].url} alt={`${vehicleName} vehicle`} />
                   {carouselImages.length > 1 && (
@@ -102,32 +120,41 @@ function VehicleList({
                   )}
                 </>
               ) : (
-                <span className="vehicle-cover-empty">No image</span>
+                <span className="vehicle-cover-empty">
+                  {fieldSettings.images.show_in_details ? 'No image' : 'Photo hidden'}
+                </span>
               )}
             </div>
             <div className="vehicle-main">
-              <span className="vehicle-id">{vehicle.vehicle_number || vehicle.id}</span>
-              <h2>{vehicleName}</h2>
+              {fieldSettings.vehicle_number.show_in_details && (
+                <span className="vehicle-id">{displayValue(vehicle.vehicle_number)}</span>
+              )}
+              {fieldSettings.vehicle_title.show_in_details && <h2>{vehicleName}</h2>}
               <p>
-                {[vehicle.company, vehicle.model].filter(Boolean).join(' ') || 'Vehicle details not set'}
-                {vehicle.year ? <> <span>·</span> {vehicle.year}</> : null}
+                {[
+                  fieldSettings.company.show_in_details ? vehicle.company : null,
+                  fieldSettings.model.show_in_details ? vehicle.model : null,
+                ].filter(Boolean).join(' ') || 'Vehicle details not set'}
+                {fieldSettings.year.show_in_details && vehicle.year ? <> <span>·</span> {vehicle.year}</> : null}
               </p>
-              {showOwner && <span className="vehicle-owner">Owner · {vehicle.owner_username || vehicle.user_id}</span>}
+                {showOwner && fieldSettings.owner_username.show_in_details && (
+                  <span className="vehicle-owner">Owner · {vehicle.owner_username || vehicle.user_id}</span>
+                )}
             </div>
-            <div className="vehicle-detail">
+            {(fieldSettings.next_service_date.show_in_details || fieldSettings.next_service_km.show_in_details) && <div className="vehicle-detail">
               <span className="detail-label">NEXT SERVICE</span>
-              <strong>{formatDate(vehicle.service?.next_service_date)}</strong>
+              {fieldSettings.next_service_date.show_in_details && <strong>{formatDate(vehicle.service?.next_service_date)}</strong>}
               <span>
-                {vehicle.service?.next_service_km == null
-                  ? 'Mileage not set'
-                  : `${vehicle.service.next_service_km.toLocaleString()} km`}
+                {fieldSettings.next_service_km.show_in_details
+                  ? formatMileage(vehicle.service?.next_service_km)
+                  : ''}
               </span>
-            </div>
-            <div className="vehicle-detail document-detail">
+            </div>}
+            {visibleDocuments.length > 0 && <div className="vehicle-detail document-detail">
               <span className="detail-label">NEXT DOCUMENT</span>
               <strong>{formatDate(nextDocument?.date)}</strong>
-              <span>{nextDocument?.summaryLabel ?? 'No renewal date'}</span>
-            </div>
+              <span>{nextDocument.summaryLabel}</span>
+            </div>}
             <div className="status-cell">
               <span className={`status ${status.className}`}>
                 <span className="status-dot" />{status.label}
@@ -173,38 +200,41 @@ function VehicleList({
               <div className="detail-group vehicle-info-group">
                 <h3>Vehicle</h3>
                 <dl>
-                  <div><dt>Vehicle number</dt><dd>{displayValue(vehicle.vehicle_number)}</dd></div>
-                  <div><dt>Make</dt><dd>{displayValue(vehicle.company)}</dd></div>
-                  <div><dt>Model</dt><dd>{displayValue(vehicle.model)}</dd></div>
-                  <div><dt>Year</dt><dd>{displayValue(vehicle.year)}</dd></div>
-                  <div><dt>Added to garage</dt><dd>{formatDate(vehicle.taken_date)}</dd></div>
-                  {showOwner && <div><dt>Owner</dt><dd>{vehicle.owner_username || vehicle.user_id}</dd></div>}
-                  <div><dt>Record ID</dt><dd>{vehicle.id}</dd></div>
+                  {detailField('vehicle_title', 'Vehicle title', vehicleName)}
+                  {detailField('vehicle_number', 'Vehicle number', displayValue(vehicle.vehicle_number))}
+                  {detailField('company', 'Make', displayValue(vehicle.company))}
+                  {detailField('model', 'Model', displayValue(vehicle.model))}
+                  {detailField('year', 'Year', displayValue(vehicle.year))}
+                  {detailField('taken_date', 'Added to garage', formatDate(vehicle.taken_date))}
+                    {showOwner && fieldSettings.owner_username.show_in_details && (
+                      <div><dt>Owner</dt><dd>{vehicle.owner_username || vehicle.user_id}</dd></div>
+                    )}
+                  {detailField('id', 'Record ID', vehicle.id)}
                 </dl>
               </div>
-              <div className="detail-group service-info-group">
+              {(fieldSettings.next_service_date.show_in_details || fieldSettings.next_service_km.show_in_details || fieldSettings.last_service_date.show_in_details || fieldSettings.last_service_km.show_in_details) && <div className="detail-group service-info-group">
                 <h3>Service</h3>
                 <dl>
-                  <div><dt>Next service</dt><dd>{formatDate(vehicle.service?.next_service_date)}</dd></div>
-                  <div><dt>Next service mileage</dt><dd>{formatMileage(vehicle.service?.next_service_km)}</dd></div>
-                  <div><dt>Last service</dt><dd>{formatDate(vehicle.service?.last_service_date)}</dd></div>
-                  <div><dt>Last mileage</dt><dd>{formatMileage(vehicle.service?.last_service_km)}</dd></div>
+                  {detailField('next_service_date', 'Next service', formatDate(vehicle.service?.next_service_date))}
+                  {detailField('next_service_km', 'Next service mileage', formatMileage(vehicle.service?.next_service_km))}
+                  {detailField('last_service_date', 'Last service', formatDate(vehicle.service?.last_service_date))}
+                  {detailField('last_service_km', 'Last mileage', formatMileage(vehicle.service?.last_service_km))}
                 </dl>
-              </div>
-              <div className="detail-group paperwork-info-group">
+              </div>}
+              {(visibleDocuments.length > 0 || fieldSettings.rc_owner_name.show_in_details || fieldSettings.chassis_no.show_in_details || fieldSettings.engine_no.show_in_details || fieldSettings.last_pucc_date.show_in_details || fieldSettings.insurance_taken_date.show_in_details) && <div className="detail-group paperwork-info-group">
                 <h3>Registration &amp; documents</h3>
                 <dl>
                   {getUpcomingDocuments(vehicle).map((document) => (
-                    <div key={document.id}><dt>{document.label}</dt><dd>{formatDate(document.date)}</dd></div>
+                    detailField(document.id, document.label, formatDate(document.date))
                   ))}
-                  <div><dt>RC owner name</dt><dd>{displayValue(vehicle.rc_owner_name)}</dd></div>
-                  <div><dt>Chassis number</dt><dd>{displayValue(vehicle.chassis_no)}</dd></div>
-                  <div><dt>Engine number</dt><dd>{displayValue(vehicle.engine_no)}</dd></div>
-                  <div><dt>Last check</dt><dd>{formatDate(vehicle.pucc?.last_pucc_date)}</dd></div>
-                  <div><dt>Policy date</dt><dd>{formatDate(vehicle.insurance?.taken_date)}</dd></div>
+                  {detailField('rc_owner_name', 'RC owner name', displayValue(vehicle.rc_owner_name))}
+                  {detailField('chassis_no', 'Chassis number', displayValue(vehicle.chassis_no))}
+                  {detailField('engine_no', 'Engine number', displayValue(vehicle.engine_no))}
+                  {detailField('last_pucc_date', 'Last check', formatDate(vehicle.pucc?.last_pucc_date))}
+                  {detailField('insurance_taken_date', 'Policy date', formatDate(vehicle.insurance?.taken_date))}
                 </dl>
-              </div>
-              <div className="detail-group photo-info-group">
+              </div>}
+              {fieldSettings.images.show_in_details && <div className="detail-group photo-info-group">
                 <h3>Photos <span>({images.length})</span></h3>
                 {images.length > 0 ? (
                   <ul className="detail-image-grid">
@@ -218,20 +248,19 @@ function VehicleList({
                     ))}
                   </ul>
                 ) : <p>No photos have been added.</p>}
-              </div>
-              <div className="detail-group record-info-group">
+              </div>}
+              {(fieldSettings.uploaded_by.show_in_details || fieldSettings.uploaded_date.show_in_details) && <div className="detail-group record-info-group">
                 <h3>Record</h3>
                 <dl>
-                  <div><dt>Uploaded by</dt><dd>{displayValue(vehicle.uploaded_by)}</dd></div>
-                  <div><dt>Uploaded on</dt><dd>{formatDate(vehicle.uploaded_date)}</dd></div>
+                  {detailField('uploaded_by', 'Uploaded by', displayValue(vehicle.uploaded_by))}
+                  {detailField('uploaded_date', 'Uploaded on', formatDate(vehicle.uploaded_date))}
                 </dl>
-              </div>
+              </div>}
             </section>
               {sharingVehicleId === vehicle.id && (
                 <VehicleShareDialog
-                  vehicleName={vehicleName}
-                  vehicleIdentifier={vehicle.vehicle_number || vehicle.id}
-                  sections={createShareSections(vehicle, showOwner, carouselImages)}
+                  sections={createShareSections(vehicle, showOwner, carouselImages, fieldSettings)}
+                  userId={userId}
                   onClose={() => setSharingVehicleId(null)}
                 />
               )}

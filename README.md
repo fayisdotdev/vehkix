@@ -6,7 +6,7 @@ Promoted administrators can switch to an admin panel for aggregate counts and ma
 
 ## Supabase setup
 
-1. Run or re-run [`supabase/user-accounts.sql`](supabase/user-accounts.sql) to add unique usernames, Auth signup handling, the private `user_vehicles` table, RC and primary-image columns, and the private `user-vehicle-images` Storage bucket with per-user policies.
+1. Run or re-run [`supabase/user-accounts.sql`](supabase/user-accounts.sql) to add unique usernames, Auth signup handling, the private `user_vehicles` table, RC and primary-image columns, admin-controlled vehicle field visibility, per-user print preferences, and the private `user-vehicle-images` Storage bucket with per-user policies.
 2. Supabase Auth enforces unique email addresses; the profiles index makes usernames unique regardless of case. Row-level security restricts each user's vehicle records and images to that user.
 3. To grant the first admin, create your normal account, then run this in the Supabase SQL Editor with your account email substituted. Admin access is stored in `admin_users` and enforced by RLS; it cannot be self-assigned through the client.
 

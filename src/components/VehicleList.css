@@ -304,9 +304,15 @@
   border-bottom: 1px solid var(--line);
 }
 
-.vehicle-share-controls > span {
+.vehicle-share-controls > span:first-child {
   margin-right: auto;
   font-size: 11px;
+}
+
+.vehicle-share-save-status {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .vehicle-share-sections {
@@ -590,7 +596,13 @@
   }
 
   .vehicle-share-controls {
+    flex-wrap: wrap;
     gap: 12px;
+  }
+
+  .vehicle-share-save-status {
+    width: 100%;
+    text-align: right;
   }
 }
 

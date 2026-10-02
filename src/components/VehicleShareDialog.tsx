@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import brandWordmark from '../../images/logo/vehkix-wordmark-color-transparent.png'
+import { useSharePreferences } from '../hooks/useSharePreferences'
 import type { ShareSection } from './vehicleShare'
 
 interface PrintDocument {
@@ -9,16 +10,22 @@ interface PrintDocument {
 }
 
 interface VehicleShareDialogProps {
-  vehicleName: string
-  vehicleIdentifier: string
   sections: ShareSection[]
+  userId: string
   onClose: () => void
 }
 
-function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose }: VehicleShareDialogProps) {
+function VehicleShareDialog({ sections, userId, onClose }: VehicleShareDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const allFieldIds = sections.flatMap((section) => section.fields.map((field) => field.id))
-  const [selectedFieldIds, setSelectedFieldIds] = useState(allFieldIds)
+  const {
+    selectedFieldIds,
+    updateSelection,
+    loaded: preferencesLoaded,
+    saveState: preferenceSaveState,
+    error: preferencesError,
+  } =
+    useSharePreferences(userId, allFieldIds)
   const [printDocument, setPrintDocument] = useState<PrintDocument | null>(null)
   const [showExitConfirm, setShowExitConfirm] = useState(false)
 
@@ -30,65 +37,67 @@ function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose 
   }, [])
 
   useEffect(() => {
-  if (!printDocument) return
+    if (!printDocument) return
 
-  const previousTitle = document.title
-  document.title = printDocument.vehicleName
-  document.body.classList.add('vehicle-printing')
+    const previousTitle = document.title
+    document.title = printDocument.vehicleName || printDocument.vehicleIdentifier || 'Vehicle record'
+    document.body.classList.add('vehicle-printing')
 
-  const finishPrint = () => {
-    onClose()
-  }
+    const finishPrint = () => onClose()
+    window.addEventListener('afterprint', finishPrint, { once: true })
 
-  window.addEventListener('afterprint', finishPrint, { once: true })
+    const print = async () => {
+      const logo = document.querySelector<HTMLImageElement>('.vehicle-print-logo img')
 
-  const print = async () => {
-    const logo = document.querySelector<HTMLImageElement>(
-      '.vehicle-print-logo img'
-    )
+      if (logo) {
+        if (!logo.complete) {
+          await new Promise<void>((resolve) => {
+            logo.addEventListener('load', () => resolve(), { once: true })
+            logo.addEventListener('error', () => resolve(), { once: true })
+          })
+        }
 
-    if (logo) {
-      if (!logo.complete) {
-        await new Promise<void>((resolve) => {
-          logo.addEventListener('load', () => resolve(), { once: true })
-          logo.addEventListener('error', () => resolve(), { once: true })
-        })
-      }
-
-      if (logo.decode) {
-        try {
-          await logo.decode()
-        } catch {
-          // Continue printing even if decode is unavailable
+        if (logo.decode) {
+          try {
+            await logo.decode()
+          } catch {
+            // Continue printing even if decode is unavailable
+          }
         }
       }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          dialogRef.current?.close()
+          window.print()
+        })
+      })
     }
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        dialogRef.current?.close()
-        window.print()
-      })
-    })
-  }
+    void print()
 
-  print()
-
-  return () => {
-    window.removeEventListener('afterprint', finishPrint)
-    document.body.classList.remove('vehicle-printing')
-    document.title = previousTitle
-  }
-}, [onClose, printDocument])
+    return () => {
+      window.removeEventListener('afterprint', finishPrint)
+      document.body.classList.remove('vehicle-printing')
+      document.title = previousTitle
+    }
+  }, [onClose, printDocument])
 
   function handlePrint() {
+    const availableFields = sections.flatMap((section) => section.fields)
+    const selectedTitle = availableFields.find((field) => field.id === 'vehicle-title')
+    const selectedIdentifier = availableFields.find(
+      (field) => field.id === 'vehicle-number' && selectedFieldIds.includes(field.id),
+    ) ?? availableFields.find(
+      (field) => field.id === 'record-id' && selectedFieldIds.includes(field.id),
+    )
     setPrintDocument({
-      vehicleName,
-      vehicleIdentifier,
+      vehicleName: selectedTitle && selectedFieldIds.includes(selectedTitle.id) ? selectedTitle.value : '',
+      vehicleIdentifier: selectedIdentifier?.value ?? '',
       sections: sections
         .map((section) => ({
           ...section,
-          fields: section.fields.filter((field) => selectedFieldIds.includes(field.id)),
+          fields: section.fields.filter((field) => field.id !== 'vehicle-title' && selectedFieldIds.includes(field.id)),
         }))
         .filter((section) => section.fields.length > 0),
     })
@@ -117,13 +126,21 @@ function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose 
           </header>
           <div className="vehicle-share-controls">
             <span>{selectedFieldIds.length} of {allFieldIds.length} selected</span>
-            <button type="button" className="text-action" onClick={() => setSelectedFieldIds(allFieldIds)}>
+            <button type="button" className="text-action" disabled={!preferencesLoaded} onClick={() => updateSelection(() => allFieldIds)}>
               Select all
             </button>
-            <button type="button" className="text-action" onClick={() => setSelectedFieldIds([])}>
+            <button type="button" className="text-action" disabled={!preferencesLoaded} onClick={() => updateSelection(() => [])}>
               Clear all
             </button>
+            <span className="vehicle-share-save-status" role="status" aria-live="polite">
+              {preferencesError
+                ? 'Choices not saved'
+                : !preferencesLoaded || preferenceSaveState === 'saving'
+                  ? 'Saving choices…'
+                  : 'Choices saved'}
+            </span>
           </div>
+          {preferencesError && <p className="vehicle-share-preferences-error" role="alert">{preferencesError}</p>}
           <div className="vehicle-share-sections">
             {sections.map((section) => (
               <fieldset className="vehicle-share-section" key={section.title}>
@@ -133,8 +150,9 @@ function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose 
                     <input
                       type="checkbox"
                       checked={selectedFieldIds.includes(field.id)}
-                      onChange={(event) => setSelectedFieldIds((current) => event.target.checked
-                        ? [...current, field.id]
+                      disabled={!preferencesLoaded}
+                      onChange={(event) => updateSelection((current) => event.target.checked
+                        ? current.includes(field.id) ? current : [...current, field.id]
                         : current.filter((id) => id !== field.id))}
                     />
                     <span>
@@ -151,7 +169,7 @@ function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose 
             <button
               type="button"
               className="primary-action"
-              disabled={selectedFieldIds.length === 0}
+              disabled={!preferencesLoaded || selectedFieldIds.length === 0}
               onClick={handlePrint}
             >
               Print / Save PDF
@@ -190,8 +208,8 @@ function VehicleShareDialog({ vehicleName, vehicleIdentifier, sections, onClose 
               <img src={brandWordmark} alt="Vehkix" />
             </div>
             <p>VEHICLE RECORD</p>
-            <h1>{printDocument.vehicleName}</h1>
-            <span>{printDocument.vehicleIdentifier}</span>
+            {printDocument.vehicleName && <h1>{printDocument.vehicleName}</h1>}
+            {printDocument.vehicleIdentifier && <span>{printDocument.vehicleIdentifier}</span>}
           </header>
           {printDocument.sections.map((section) => (
             <section className="vehicle-print-section" key={section.title}>
